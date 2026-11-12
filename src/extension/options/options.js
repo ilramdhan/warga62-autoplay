@@ -115,7 +115,7 @@ function renderAccounts() {
       return li;
     }),
   );
-  $('accounts-count').textContent = `${list.length} akun. Dibutuhkan 2 sampai 8.`;
+  $('accounts-count').textContent = `${list.length} akun (maks. 8).`;
   $('nick-list').replaceChildren(
     ...list.map((n) => {
       const o = document.createElement('option');
