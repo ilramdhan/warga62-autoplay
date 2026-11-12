@@ -4,6 +4,13 @@ Semua perubahan penting pada proyek ini dicatat di berkas ini.
 
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/), dan proyek ini memakai [Semantic Versioning](https://semver.org/lang/id/).
 
+## [2.1.1](https://github.com/ilramdhan/warga62-autoplay/compare/v2.1.0...v2.1.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* **lobby:** atur room via label radio, bukan button; klik Selesai andal ([98ddd71](https://github.com/ilramdhan/warga62-autoplay/commit/98ddd7190a8e36dcc52161f9fbe161f0d2e80b2e))
+
 ## [2.1.0](https://github.com/ilramdhan/warga62-autoplay/compare/v2.0.0...v2.1.0) (2026-11-12)
 
 
