@@ -19,6 +19,8 @@ Menggunakan bot dapat melanggar ketentuan layanan game dan bisa berakibat akun d
 
 ## Tidak berafiliasi
 
+Penafian lengkap (tanpa jaminan, batas tanggung jawab, privasi, permintaan pemilik game): [DISCLAIMER.md](../DISCLAIMER.md).
+
 Penulis proyek ini tidak berafiliasi dengan, didukung oleh, atau disetujui oleh developer Warga +62.
 
 Jika menemukan kerentanan di game, laporkan langsung ke developer game. Lihat [SECURITY.md](../SECURITY.md).
