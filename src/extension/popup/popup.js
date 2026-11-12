@@ -60,12 +60,14 @@ async function renderLogs() {
 
 async function update(patch) {
   const next = { ...config, ...patch };
-  const errs = next.enabled ? errorsOf(next) : [];
-  if (errs.length) {
+  const errs = errorsOf(next);
+  // Hanya cegah MENGAKTIFKAN bot saat ada galat. Perubahan field lain (role, nick, mode)
+  // tetap disimpan, supaya setelan tidak pernah "tersangkut" karena galat yang tak berkaitan.
+  if (patch.enabled === true && errs.length) {
     showError(errs);
     return;
   }
-  showError([]);
+  showError(next.enabled ? errs : []);
   config = await saveConfig(next);
   renderConfig();
 }

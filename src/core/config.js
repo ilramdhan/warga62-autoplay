@@ -20,9 +20,11 @@ export const DEFAULT_CONFIG = {
     maxPlayers: 4,
     map: 'pulau',
     awards: false,
-    autoByAchievement: true,
+    // Default mati: grinding XP jadi Survival cepat (host cepat bangkrut, game pendek, ulang).
+    // Nyalakan di Pengaturan kalau mau mengejar pencapaian (sebagian memaksa mode Ronde yang lebih lama).
+    autoByAchievement: false,
   },
-  achievements: { enabled: true, targets: [] },
+  achievements: { enabled: false, targets: [] },
   strategy: { riskTolerance: 0.5, reserveRounds: 1.0, lendInterest: 'auto', usePinjol: 'auto' },
   chat: { enabled: true, stickers: true, quickPhrases: true, customPhrases: [] },
   timing: {
