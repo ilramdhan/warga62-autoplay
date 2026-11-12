@@ -58,18 +58,22 @@ export default {
     const mortgageTiles = mortgages.map((b) => tileOf(b, MORTGAGE));
     const oweText = findLeaf(/kas minus/);
     const owe = oweText ? Math.abs(parseRupiah(oweText.textContent) ?? 0) : Math.max(0, -(ctx.me?.cash ?? 0));
+    // Cegah loop: setelah "Minta pinjaman" ditolak ("Tidak jadi, pilih lagi") policy jangan diminta
+    // mengulang requestLoan. Jejak ini auto-reset antar-episode (kadaluarsa 15 dtk) & saat game baru.
+    const triedLoan = now - (ctx.memo.debtTriedLoanAt ?? 0) < 15000;
     const info = {
       owe,
       canSell: sellTiles.filter((t) => t != null),
       canMortgage: mortgageTiles.filter((t) => t != null),
-      canLoan: !!loan,
+      canLoan: !!loan && !triedLoan,
       canPinjol: !!pinjol,
+      triedLoan,
     };
 
     const fallback = () => {
       if (sells.length) return { type: 'sell', tile: sellTiles[0] };
       if (mortgages.length) return { type: 'mortgage', tile: mortgageTiles[0] };
-      if (loan) return { type: 'requestLoan' };
+      if (loan && !triedLoan) return { type: 'requestLoan' };
       return { type: 'bankrupt' };
     };
     const step = ask(ctx, 'debtStep', fallback, info) ?? fallback();
@@ -97,6 +101,7 @@ export default {
     }
     if (!target || !throttle(ctx, 'debt', 1200)) return false;
     if (target === bankrupt) ctx.memo.bankruptIntent = now;
+    if (target === loan) ctx.memo.debtTriedLoanAt = now;
     ctx.act.click(target);
     ctx.log.info(`Gali Lubang: ${labelOf(target)}.`);
     await ctx.act.sleep(900);

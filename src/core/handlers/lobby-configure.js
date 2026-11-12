@@ -1,7 +1,6 @@
 import { ALLOWED_ACCESS } from '../config.js';
 import { roomOptionLabels } from './util.js';
 
-const ACCESS_LABELS = ['publik', 'teman', 'privat'];
 const MAX_TRIES = 3;
 
 /**
@@ -25,19 +24,12 @@ export default {
       return false;
     }
 
-    let room = { ...ctx.cfg.room };
-    if (room.autoByAchievement && typeof ctx.policy?.roomPreset === 'function') {
-      try {
-        const preset = ctx.policy.roomPreset(ctx.view);
-        if (preset && typeof preset === 'object') room = { ...room, ...preset };
-      } catch (e) {
-        ctx.log.warn(`Preset room gagal: ${e?.message ?? e}`);
-      }
+    // roomPreset sudah dihitung di config (cfg.room + preset pencapaian + rounds). Fallback ke cfg.room.
+    const room = { ...ctx.cfg.room, ...(ctx.cfg.roomPreset ?? {}) };
+    if (!ALLOWED_ACCESS.includes(room.access)) {
+      ctx.log.warn(`Akses room "${room.access}" tidak diizinkan; memakai Privat.`);
+      room.access = 'privat';
     }
-    if (!ALLOWED_ACCESS.includes(ctx.cfg.room.access)) {
-      ctx.log.warn(`Akses room "${ctx.cfg.room.access}" tidak diizinkan; memakai Privat.`);
-    }
-    room.access = ALLOWED_ACCESS.includes(ctx.cfg.room.access) ? ctx.cfg.room.access : 'privat';
 
     let anchor = findButton('privat', document, { enabledOnly: false });
     if (!anchor) {
@@ -70,17 +62,24 @@ export default {
       }
     }
 
-    const selectedAccess = ACCESS_LABELS.filter((l) => isSelected(findButton(l, box, { enabledOnly: false })) === true);
-    const publicOn = selectedAccess.includes('publik');
+    // Keamanan akses: tandai tidak aman kalau Publik jelas menyala, ATAU akses yang diinginkan
+    // (Privat/Teman) jelas TIDAK terpilih. Kalau tombol tidak mengekspos status (null), klik
+    // dianggap berhasil tapi dicatat, supaya kontrol tanpa aria-state tidak memblokir semua game.
+    const stateOf = (l) => isSelected(findButton(l, box, { enabledOnly: false }));
+    const wantedLabel = room.access === 'teman' ? 'teman' : 'privat';
+    const publicOn = stateOf('publik') === true;
+    const wantedOff = stateOf(wantedLabel) === false;
+    const unverifiable = stateOf(wantedLabel) === null && stateOf('publik') === null;
     const wanted = norm(roomOptionLabels(room)[0].label);
-    ctx.memo.accessUnsafe = publicOn;
+    ctx.memo.accessUnsafe = publicOn || wantedOff;
+    if (unverifiable) ctx.log.warn('Status akses room tidak bisa diverifikasi; mengandalkan klik Privat/Teman.');
     const close = findButton('selesai', box) || findButton('tutup', box);
     if (close) {
       ctx.act.click(close);
       await ctx.act.sleep(500);
     }
-    if (publicOn) {
-      ctx.log.error('Akses room masih Publik; tidak akan memulai. Ubah ke Privat/Teman.');
+    if (ctx.memo.accessUnsafe) {
+      ctx.log.error('Akses room bukan Privat/Teman; tidak akan memulai. Periksa setelan akses.');
       return true;
     }
     ctx.memo.configured = 'ok';

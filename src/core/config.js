@@ -14,6 +14,7 @@ export const DEFAULT_CONFIG = {
   room: {
     access: 'privat',
     mode: 'survival',
+    rounds: 15,
     difficulty: 'normal',
     startingCash: 10,
     maxPlayers: 4,
@@ -42,6 +43,7 @@ const ROOM_MODES = ['survival', 'ronde'];
 const DIFFICULTIES = ['santai', 'normal', 'inflasi', 'krismon'];
 const CASH_OPTIONS = [5, 10, 15];
 const PLAYER_OPTIONS = [4, 6, 8];
+const ROUND_OPTIONS = [10, 15, 20];
 const MAPS = ['pulau', 'kota-banjir', 'ibu-kota-baru', 'desa-sawah', 'acak'];
 const LEND_OPTIONS = [0, 10, 25, 50];
 const PINJOL_OPTIONS = ['auto', 'never', 'always'];
@@ -129,6 +131,7 @@ export function normalizeConfig(partial = {}) {
     room: {
       access: typeof room.access === 'string' ? room.access.trim().toLowerCase() : d.room.access,
       mode: oneOf(room.mode, ROOM_MODES, d.room.mode),
+      rounds: nearest(room.rounds, ROUND_OPTIONS, d.room.rounds),
       difficulty: oneOf(room.difficulty, DIFFICULTIES, d.room.difficulty),
       startingCash: nearest(room.startingCash, CASH_OPTIONS, d.room.startingCash),
       maxPlayers: nearest(room.maxPlayers, PLAYER_OPTIONS, d.room.maxPlayers),
