@@ -1,19 +1,17 @@
-import { nowMs, lobbyPresence, nameInElement, throttle } from './util.js';
+import { nowMs, lobbyPresence, nameInElement, throttle, inviteModalBox } from './util.js';
 
 const UNDANG = /^undang$/;
 const TERUNDANG = /^terundang$/;
 
-/** Kotak modal "Undang teman" (judul → naik sampai ada tombol Tutup), atau null bila tertutup. */
-function inviteBox(dom) {
-  const title = dom.findLeaf('undang teman');
-  return title ? (dom.climb(title, (p) => dom.findButton('tutup', p, { enabledOnly: false })) ?? null) : null;
-}
+/** Kotak modal "Undang teman" (di-scope ke modal, bukan BODY), atau null bila tertutup. */
+const inviteBox = inviteModalBox;
 
 const CLOSE_TRIES = 3;
 
-/** Tutup modal: "Tutup", lalu Escape bila gagal. true bila modal benar-benar hilang. */
+/** Tutup modal: "Tutup" DI DALAM modal saja, lalu Escape bila gagal. true bila modal benar-benar hilang. */
 async function closeBox(ctx, box) {
-  const close = ctx.dom.findButton('tutup', box ?? document);
+  if (!box) return !inviteBox(ctx.dom);
+  const close = ctx.dom.findButton('tutup', box, { enabledOnly: false });
   if (close) {
     ctx.act.click(close);
     if (await ctx.act.waitFor(() => !inviteBox(ctx.dom), { timeout: 1500 })) return true;

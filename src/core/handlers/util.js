@@ -232,13 +232,15 @@ const EVENT_TEXT =
 /**
  * Gabungkan bukti kehadiran di ruang tunggu (murni, bisa diuji).
  * - `texts`: teks pendek dari elemen ruang tunggu (sudah tanpa modal Undang teman / dialog / chat).
+ * - `players`: nama dari `game.players` (React state) bila terbaca; sumber paling andal.
  * - `onlyHost`: teks "Butuh minimal 2 pemain." terlihat → pasti belum ada akun lain.
  * - `startEnabled`: "Mulai main" aktif → game sendiri menjamin ≥ 2 pemain.
  * @returns {{present: string[], missing: string[], count: number}}
  */
-export function combinePresence({ others, texts, onlyHost = false, startEnabled = false }) {
+export function combinePresence({ others, texts, players = [], onlyHost = false, startEnabled = false }) {
   const roster = texts.filter((t) => !EVENT_TEXT.test(norm(t)));
-  const present = onlyHost ? [] : others.filter((n) => roster.some((t) => textHasName(t, n)));
+  const inGame = new Set(players.map(norm).filter(Boolean));
+  const present = onlyHost ? [] : others.filter((n) => inGame.has(norm(n)) || roster.some((t) => textHasName(t, n)));
   const missing = others.filter((n) => !present.includes(n));
   const count = Math.min(1 + others.length, Math.max(1 + present.length, startEnabled && !onlyHost ? 2 : 1));
   return { present, missing, count };
@@ -248,10 +250,29 @@ const NOT_LOBBY = '[role="dialog"], [aria-modal="true"], dialog, [data-w62]';
 const LOBBY_CONTROL = /^(mulai main|undang teman|bagikan link|link tersalin|atur)$/;
 const CHAT_CLIMB_MAX = 4;
 
-/** Modal Undang teman (selalu diabaikan). */
-function inviteModalBox(dom) {
-  const title = dom.findLeaf('undang teman');
-  return title ? (dom.climb(title, (p) => dom.findButton('tutup', p, { enabledOnly: false })) ?? title) : null;
+const INVITE_SUBTITLE = /^teman yang online dan tidak sedang main\.?$/;
+const CLICKABLE = 'button, a[href], [role="button"]';
+const DIALOG = '[role="dialog"], [aria-modal="true"], dialog';
+
+/**
+ * Kontainer modal "Undang teman", atau null bila modal tertutup.
+ * Lobby punya TOMBOL "Undang teman" dan tombol "Tutup" lain (panel Aturan main), jadi:
+ * - jangkar = subjudul "Teman yang online dan tidak sedang main." atau judul "Undang teman" yang BUKAN tombol;
+ * - naik ke leluhur terdekat yang punya tombol "Tutup", tapi ditolak bila sudah memuat kontrol lobby
+ *   ("Bagikan link", "Mulai main", tombol "Undang teman", "Atur") atau sampai BODY/HTML.
+ */
+export function inviteModalBox(dom) {
+  const hasClose = (p) => !!dom.findButton('tutup', p, { enabledOnly: false });
+  const anchors = [dom.findLeaf(INVITE_SUBTITLE), dom.findLeaf('undang teman')];
+  for (const a of anchors) {
+    if (!a || a.closest?.(CLICKABLE)) continue;
+    const dialog = a.closest?.(DIALOG);
+    const box = dialog && hasClose(dialog) ? dialog : dom.climb(a, hasClose);
+    if (!box || /^(body|html)$/i.test(box.tagName ?? '')) continue;
+    if (dom.findButton(LOBBY_CONTROL, box, { enabledOnly: false })) continue; // naik kebablasan ke lobby
+    return box;
+  }
+  return null;
 }
 
 /** Panel chat: naik dari input "Tulis pesan…" (maks 4 level) tanpa melewati kontainer tombol ruang tunggu. */
@@ -306,6 +327,7 @@ export function lobbyPresence(ctx) {
   cache.v = combinePresence({
     others: otherAccounts(ctx.cfg),
     texts,
+    players: playersOf(ctx.game).map((p) => p.name),
     onlyHost: !!dom.findLeaf(/^butuh minimal 2 pemain\.?$/),
     startEnabled: !!start && !dom.isDisabled(start),
   });
