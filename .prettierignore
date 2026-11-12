@@ -4,3 +4,5 @@ coverage/
 .runner-profiles/
 package-lock.json
 *.zip
+# Dikelola oleh release-please, bukan Prettier
+CHANGELOG.md
