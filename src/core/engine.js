@@ -215,8 +215,11 @@ export function createEngine({ getConfig, emit, log, handlers = allHandlers }) {
         sendStatus({ ...base, state: 'waiting', handler: null });
       }
 
-      const guestIdle = cfg.role === 'guest' && (path === '/' || path.startsWith('/online'));
-      if (!guestIdle && Date.now() - lastActionAt > cfg.timing.watchdogMs) {
+      // Guest yang menunggu undangan (beranda/online) memang diam tanpa batas. Guest di ruang tunggu
+      // menunggu host mulai: batas lebih longgar (5× watchdog) agar room mati tetap ditinggalkan.
+      const guestHome = cfg.role === 'guest' && (path === '/' || path.startsWith('/online'));
+      const limit = cfg.role === 'guest' && scopes.has('lobby') ? cfg.timing.watchdogMs * 5 : cfg.timing.watchdogMs;
+      if (!guestHome && Date.now() - lastActionAt > limit) {
         log.warn('Tidak ada aksi terlalu lama; kembali ke beranda.');
         lastActionAt = Date.now();
         memo = {};

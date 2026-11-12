@@ -1,32 +1,57 @@
-import { nameFromTitle, throttle } from './util.js';
+import { lobbyPresence, nameFromTitle, pathname, throttle } from './util.js';
 
-/** Undangan mabar: terima hanya dari hostName (peran guest, tidak sedang main); selain itu ditutup. */
+const ACCEPT = 'gabung';
+const DECLINE = /^(tutup|nanti)$/;
+
+/**
+ * Undangan mabar ("<nama> mengajak mabar"): guest menerima hanya dari hostName dan hanya bila tidak
+ * sedang di tengah game; selain itu ditutup ("Nanti"/"Tutup").
+ */
 export default {
   id: 'invite-incoming',
   scope: 'any',
   priority: 10,
   detect(ctx) {
-    const title = ctx.dom.findLeaf(/ mengajak mabar$/);
+    const { findLeaf, climb, findButton } = ctx.dom;
+    const title = findLeaf(/ mengajak mabar$/);
     if (!title) return null;
     const from = nameFromTitle(title.textContent, 'mabar');
     if (!from) return null;
-    return { title, from, box: ctx.dom.boxOf(title, 2) };
+    // Kotak modal = leluhur terdekat yang memuat tombol Gabung atau Tutup/Nanti (bukan sekadar ≥2 tombol).
+    const box = climb(title, (p) => findButton(ACCEPT, p, { enabledOnly: false }) || findButton(DECLINE, p)) ?? null;
+    return box ? { from, box } : null;
   },
   async run(ctx, { from, box }) {
-    const { findButton, norm } = ctx.dom;
-    const playing = ctx.game?.phase && ctx.game.phase !== 'game_over';
-    const accept = ctx.cfg.role === 'guest' && norm(from) === norm(ctx.cfg.hostName) && !playing;
-    if (accept) {
-      const join = findButton('gabung', box);
-      if (!join || !throttle(ctx, 'invite-gabung', 2500)) return false;
+    const { findButton, norm, inLobby } = ctx.dom;
+    const fromHost = norm(from) === norm(ctx.cfg.hostName);
+    const inRoom = pathname().startsWith('/room/');
+    const lobby = inRoom && inLobby();
+    // Sedang main = di /room/ di luar ruang tunggu, kecuali halaman gabung (belum masuk) atau game sudah selesai.
+    // State tak terbaca di tengah game tetap dianggap main (lebih aman daripada meninggalkan game).
+    const joinPage =
+      inRoom &&
+      !lobby &&
+      !ctx.game &&
+      !!findButton(/^(gabung|menghubungkan…|menghubungkan\.\.\.)$/, document, {
+        enabledOnly: false,
+      });
+    const playing = inRoom && !lobby && !joinPage && ctx.game?.phase !== 'game_over';
+    // Sudah di ruang tunggu bersama host: undangan ulang tidak perlu (hindari keluar-masuk room).
+    const withHost = lobby && lobbyPresence(ctx).present.some((n) => norm(n) === norm(ctx.cfg.hostName));
+    if (ctx.cfg.role === 'guest' && fromHost && !playing && !withHost) {
+      const join = findButton(ACCEPT, box);
+      if (!join) return false; // tombol masih "Menghubungkan…"/nonaktif: tunggu
+      if (!throttle(ctx, 'invite-gabung', 3000)) return false;
       ctx.act.click(join);
       ctx.log.info(`Menerima undangan dari ${from}.`);
+      await ctx.act.sleep(1500);
       return true;
     }
-    const close = findButton('tutup', box) || findButton('nanti', box);
+    const close = findButton('nanti', box) || findButton('tutup', box);
     if (!close || !throttle(ctx, 'invite-tutup', 2000)) return false;
     ctx.act.click(close);
-    ctx.log.info(`Menolak undangan dari ${from}.`);
+    const why = ctx.cfg.role !== 'guest' ? 'peran host' : !fromHost ? `bukan host ${ctx.cfg.hostName}` : 'sedang main';
+    ctx.log.info(`Menolak undangan dari ${from} (${why}).`);
     return true;
   },
 };

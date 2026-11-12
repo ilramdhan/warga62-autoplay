@@ -65,7 +65,11 @@ export function percentFromText(text) {
 /** Nama pengirim dari judul "<nama> mengajak mabar" / "<nama> minta uang". */
 export function nameFromTitle(text, suffix) {
   const re = suffix === 'mabar' ? /^(.+?)\s+mengajak mabar$/i : /^([^/]+?)\s+minta uang\b/i;
-  const m = re.exec(String(text ?? '').trim());
+  const m = re.exec(
+    String(text ?? '')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  );
   return m ? m[1].trim() : null;
 }
 
@@ -178,15 +182,107 @@ export function otherAccounts(cfg) {
   return (cfg.accounts ?? []).filter((n) => norm(n) !== me);
 }
 
-/** Apakah nama akun tampak di halaman ruang tunggu (teks body). */
-export function lobbyHasName(ctx, name) {
-  const body = (ctx.memo.__bodyText ??= { t: 0, v: '' });
-  const now = nowMs(ctx);
-  if (now - body.t > 200) {
-    body.t = now;
-    body.v = norm(document.body?.textContent);
+const NAME_CHAR = '[\\p{L}\\p{N}\\p{M}._-]';
+
+/**
+ * Apakah `name` muncul utuh (bukan potongan nick lain) di `text`. Tanpa beda huruf besar/kecil.
+ * Titik penutup kalimat setelah nama ("… JULE.") tetap dianggap batas.
+ */
+export function textHasName(text, name) {
+  const n = norm(name);
+  if (!n) return false;
+  return new RegExp(`(?<!${NAME_CHAR})${esc(n)}(?=\\.?(?!${NAME_CHAR}))`, 'u').test(norm(text));
+}
+
+/** Nama akun (dari `wanted`) yang muncul utuh di `text`; nama terpanjang dulu agar "JULE" tak kalah oleh "JUL". */
+export function nameInText(text, wanted) {
+  return [...wanted].sort((a, b) => norm(b).length - norm(a).length).find((n) => textHasName(text, n)) ?? null;
+}
+
+/** Teks notifikasi/peristiwa ("JULE bergabung", "JULE keluar") bukan bukti kehadiran. */
+const EVENT_TEXT =
+  /(^|\s)(bergabung|keluar|masuk|meninggalkan|diundang|terundang|mengajak|undang|dikeluarkan)(\s|$|[.!])/u;
+
+/**
+ * Gabungkan bukti kehadiran di ruang tunggu (murni, bisa diuji).
+ * - `texts`: teks pendek dari elemen ruang tunggu (sudah tanpa modal Undang teman / dialog / chat).
+ * - `onlyHost`: teks "Butuh minimal 2 pemain." terlihat → pasti belum ada akun lain.
+ * - `startEnabled`: "Mulai main" aktif → game sendiri menjamin ≥ 2 pemain.
+ * @returns {{present: string[], missing: string[], count: number}}
+ */
+export function combinePresence({ others, texts, onlyHost = false, startEnabled = false }) {
+  const roster = texts.filter((t) => !EVENT_TEXT.test(norm(t)));
+  const present = onlyHost ? [] : others.filter((n) => roster.some((t) => textHasName(t, n)));
+  const missing = others.filter((n) => !present.includes(n));
+  const count = Math.min(1 + others.length, Math.max(1 + present.length, startEnabled && !onlyHost ? 2 : 1));
+  return { present, missing, count };
+}
+
+const NOT_LOBBY = '[role="dialog"], [aria-modal="true"], dialog, [data-w62]';
+const LOBBY_CONTROL = /^(mulai main|undang teman|bagikan link|link tersalin|atur)$/;
+const CHAT_CLIMB_MAX = 4;
+
+/** Modal Undang teman (selalu diabaikan). */
+function inviteModalBox(dom) {
+  const title = dom.findLeaf('undang teman');
+  return title ? (dom.climb(title, (p) => dom.findButton('tutup', p, { enabledOnly: false })) ?? title) : null;
+}
+
+/** Panel chat: naik dari input "Tulis pesan…" (maks 4 level) tanpa melewati kontainer tombol ruang tunggu. */
+function chatBox(dom) {
+  const chat = document.querySelector('input[placeholder^="Tulis pesan" i], textarea[placeholder^="Tulis pesan" i]');
+  if (!chat) return null;
+  let box = chat;
+  for (let p = chat.parentElement, i = 0; p && p !== document.body && i < CHAT_CLIMB_MAX; p = p.parentElement, i++) {
+    if (dom.findButton(LOBBY_CONTROL, p, { enabledOnly: false })) break;
+    box = p;
   }
-  return body.v.includes(norm(name));
+  return box;
+}
+
+/** Teks pendek (≤ 80 karakter) dari elemen terlihat di ruang tunggu, di luar `skip`. */
+function lobbyTexts(dom, skip) {
+  const root = document.body;
+  if (!root) return [];
+  const seen = new Set();
+  const out = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const el = node.parentElement;
+    if (!el || seen.has(el) || !node.nodeValue.trim()) continue;
+    seen.add(el);
+    const raw = el.textContent;
+    if (raw.length > 80 || el.closest('script, style, input, textarea, ' + NOT_LOBBY)) continue;
+    if (skip.some((b) => b && b.contains(el)) || !dom.isVisible(el)) continue;
+    out.push(norm(raw));
+  }
+  return out;
+}
+
+/**
+ * Akun lain yang hadir di ruang tunggu. Nama dicari di elemen pendek di luar modal "Undang teman",
+ * dialog lain, dan panel chat (dulu memakai teks body sehingga nama di daftar undangan dianggap hadir).
+ * Pengaman: nama saya sendiri pasti ada di daftar pemain; kalau tidak terbaca, pengecualian chat
+ * kemungkinan ikut menelan daftar pemain, jadi dihitung ulang tanpa pengecualian chat.
+ * Hasil di-cache 300 ms di ctx.memo.
+ */
+export function lobbyPresence(ctx) {
+  const cache = (ctx.memo.__presence ??= { t: -Infinity, v: null });
+  const now = nowMs(ctx);
+  if (cache.v && now - cache.t <= 300) return cache.v;
+  const { dom } = ctx;
+  const invite = inviteModalBox(dom);
+  let texts = lobbyTexts(dom, [invite, chatBox(dom)]);
+  if (ctx.cfg.myName && !texts.some((t) => textHasName(t, ctx.cfg.myName))) texts = lobbyTexts(dom, [invite]);
+  const start = dom.findButton('mulai main', document, { enabledOnly: false });
+  cache.v = combinePresence({
+    others: otherAccounts(ctx.cfg),
+    texts,
+    onlyHost: !!dom.findLeaf(/^butuh minimal 2 pemain\.?$/),
+    startEnabled: !!start && !dom.isDisabled(start),
+  });
+  cache.t = now;
+  return cache.v;
 }
 
 export const pathname = () => (typeof location !== 'undefined' ? location.pathname : '/');
