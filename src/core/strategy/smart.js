@@ -144,6 +144,7 @@ export function createSmartPolicy(cfg = {}) {
    * tapi kesempatan bangun hanya datang saat gajian. Tanpa dana ini kas habis untuk tanah dan bot tak pernah bangun.
    */
   const buildFund = (view) => {
+    if (finalRound(view)) return 0; // ronde terakhir tidak membangun; jangan tahan kas
     const best = bestUpgrade(view);
     if (!best) return 0;
     const prov = provinceOf(best.t);
@@ -181,6 +182,8 @@ export function createSmartPolicy(cfg = {}) {
     const completes = !othersHere && st.mine === st.size - 1;
     if (completes) value += ev.income + 0.5 * PROVINCES[st.prov].price;
     else if (!othersHere && st.mine > 0) value += 0.25 * price;
+    // Provinsi masih kosong: membuka peluang monopoli (tanpa ini kota pertama tak pernah dibeli di Krismon).
+    else if (!othersHere && st.mine === 0) value += 0.15 * price;
     if (st.maxOther === st.size - 1) value += 0.5 * price; // menggagalkan provinsi lawan
     if (othersHere && st.maxOther < st.size - 1) value *= 0.8;
     return value;
@@ -354,7 +357,11 @@ export function createSmartPolicy(cfg = {}) {
     const reserve = reserveFor(view);
     // Bangunan di provinsi lengkap = sumber sewa utama & bisa dijual lagi (refund) saat Gali Lubang,
     // jadi cadangannya sedikit lebih longgar dari pembelian tanah.
-    const keepFull = flags.maxBuild ? reserve * 0.25 : reserve * 0.75;
+    // Dibatasi setengah kekayaan bersih: provinsi lengkap bisa digadai/dijual untuk kasus terburuk, jadi
+    // cadangan yang membengkak (lawan punya Elit + Krisis) tidak boleh membuat bot berhenti membangun.
+    const keepFull = flags.maxBuild
+      ? reserve * 0.25
+      : Math.min(reserve * 0.75, Math.max(0, view.netWorth(p.id)) * 0.5 + dueSoonDebt(view));
     const keepOther = flags.maxBuild ? reserve * 0.25 : reserve;
     let cash = p.cash;
     const ranked = candidates

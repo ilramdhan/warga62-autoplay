@@ -416,3 +416,43 @@ test('smart: tidak meminjamkan ke pemain yang lebih kaya (mode Ronde juga)', () 
   g.players.h.cash = 9_000_000;
   assert.equal(p.lendOffer(buildView(g, 'me', ARENA), { borrowerId: 'h', amount: 300_000 }), null);
 });
+
+test('smart: kota pertama provinsi kosong tetap dibeli di awal game (Krismon, 2 pemain)', () => {
+  const p = createPolicy(ARENA);
+  for (const diff of DIFFS) {
+    const g = arena3(diff, 10_000_000, {}, { round: 1 });
+    delete g.players.h;
+    const v = buildView(g, 'me', ARENA);
+    assert.equal(p.shouldBuy(v, { tile: 1, price: 500_000 }), true, `${diff}: ${p.lastReason}`);
+  }
+});
+
+test('smart: cadangan dibatasi kekayaan sehingga tetap membangun di akhir game (Krismon + Krisis)', () => {
+  const p = createPolicy(ARENA);
+  // lawan punya provinsi Elit di depan; saya punya Aceh lengkap & 6 jt
+  const props = {
+    1: { owner: 'me' },
+    2: { owner: 'me' },
+    3: { owner: 'me' },
+    41: { owner: 'b', level: 3 },
+    42: { owner: 'b', level: 3 },
+    43: { owner: 'b', level: 3 },
+    45: { owner: 'b', level: 3 },
+    46: { owner: 'b', level: 3 },
+    47: { owner: 'b', level: 3 },
+  };
+  const g = arena3('krismon', 6_000_000, props, { round: 20, crisisActive: true });
+  g.players.me.position = 38;
+  const v = buildView(g, 'me', ARENA);
+  assert.ok(p.chooseUpgrades(v, [1, 2, 3]).length > 0, p.lastReason);
+});
+
+test('smart: ronde terakhir tidak menahan kas untuk dana bangun', () => {
+  const p = createPolicy(ARENA);
+  const props = { 1: { owner: 'me' }, 2: { owner: 'me' }, 3: { owner: 'me' } };
+  const g = arena3('normal', 2_400_000, props, { round: 15 });
+  g.settings = { difficulty: 'normal', mode: 'ronde', maxRounds: 15 };
+  const v = buildView(g, 'me', ARENA);
+  assert.equal(p.chooseUpgrades(v, [1, 2, 3]).length, 0, 'tidak bangun di ronde terakhir');
+  assert.doesNotMatch(p.shouldBuy(v, { tile: 45, price: 1_800_000 }) ? '' : p.lastReason, /dana bangun/);
+});
