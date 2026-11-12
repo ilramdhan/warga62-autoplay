@@ -31,7 +31,7 @@ export const DEFAULT_CONFIG = {
     buildDelayPerTileMs: 1200,
     watchdogMs: 180000,
     minStartPlayers: 2,
-    inviteRetryMs: 45000,
+    inviteRetryMs: 20000,
   },
   debug: false,
 };

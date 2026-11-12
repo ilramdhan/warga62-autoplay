@@ -83,9 +83,9 @@ export function roomOptionLabels(room = {}) {
   }[room.map];
   const diff = { santai: 'Santai', normal: 'Normal', inflasi: 'Inflasi', krismon: 'Krismon' }[room.difficulty];
   const mode = { survival: 'Survival', ronde: 'Ronde' }[room.mode];
-  // Sub-opsi jumlah ronde hanya muncul saat mode Ronde dipilih. Label ("10"/"15"/"20") belum
-  // diverifikasi di game asli; kalau tak ketemu, lobby-configure hanya mencatat peringatan.
-  const rounds = room.mode === 'ronde' ? { 10: '10', 15: '15', 20: '20' }[room.rounds] : null;
+  // Sub-opsi jumlah ronde ("Batas ronde") hanya muncul saat mode Ronde dipilih.
+  // Label asli di game: "10 ronde" / "15 ronde" / "20 ronde".
+  const rounds = room.mode === 'ronde' ? { 10: '10 ronde', 15: '15 ronde', 20: '20 ronde' }[room.rounds] : null;
   return [
     { key: 'access', label: access },
     { key: 'mode', label: mode },
