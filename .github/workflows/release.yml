@@ -18,16 +18,16 @@ jobs:
     steps:
       # Membuat/menyegarkan "release PR" (bump versi + CHANGELOG) dari commit Conventional.
       # Saat PR itu di-merge, release-please membuat tag + GitHub Release.
-      - uses: googleapis/release-please-action@v4
+      - uses: googleapis/release-please-action@v5
         id: release
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       # Hanya saat sebuah release benar-benar dibuat: build lalu lampirkan zip extension.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: ${{ steps.release.outputs.release_created }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: ${{ steps.release.outputs.release_created }}
         with:
           node-version: 22
