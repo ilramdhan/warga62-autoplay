@@ -1,0 +1,68 @@
+name: Laporan bug
+description: Bot berperilaku tidak semestinya
+title: '[Bug] '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Terima kasih sudah melapor. Pastikan kamu hanya memakai akun milik sendiri di room privat. Hapus cookie, token, dan data pribadi dari isian ini.
+  - type: dropdown
+    id: runner
+    attributes:
+      label: Jenis runner
+      options:
+        - extension
+        - runner
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Versi
+      placeholder: 'contoh: 2.0.0'
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      options:
+        - grind
+        - arena
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: Peran
+      options:
+        - host
+        - guest
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Apa yang terjadi?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Yang seharusnya terjadi
+  - type: textarea
+    id: steps
+    attributes:
+      label: Langkah untuk mereproduksi
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot (opsional)
+      description: Seret lalu lepas gambar ke kolom ini.
+  - type: textarea
+    id: console
+    attributes:
+      label: Log konsol [W62] (opsional)
+      description: Salin baris yang diawali [W62] dari DevTools, tab Console. Hapus data pribadi yang tidak perlu.
+      render: text

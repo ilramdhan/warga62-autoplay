@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Warga +62 Autoplay</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="top">
+      <h1>Warga <span class="plus">+62</span></h1>
+      <span class="sub">Autoplay</span>
+    </header>
+
+    <button id="toggle" class="toggle off" type="button" aria-pressed="false">
+      <span class="toggle-label">MULAI</span>
+      <span class="toggle-hint">Bot sedang mati</span>
+    </button>
+    <p id="err" class="err" role="alert" hidden></p>
+
+    <section class="panel" aria-label="Status">
+      <dl class="status">
+        <div>
+          <dt>Status</dt>
+          <dd id="s-state">-</dd>
+        </div>
+        <div>
+          <dt>Handler</dt>
+          <dd id="s-handler">-</dd>
+        </div>
+        <div>
+          <dt>Ronde</dt>
+          <dd id="s-round">-</dd>
+        </div>
+        <div>
+          <dt>Fase</dt>
+          <dd id="s-phase">-</dd>
+        </div>
+        <div class="wide">
+          <dt>Kas</dt>
+          <dd id="s-cash">-</dd>
+        </div>
+      </dl>
+      <p id="s-age" class="muted">Belum ada data dari halaman game.</p>
+    </section>
+
+    <section class="panel quick" aria-label="Pengaturan cepat">
+      <label class="field">
+        <span>Nick saya</span>
+        <input id="myName" type="text" autocomplete="off" spellcheck="false" placeholder="nick di mainwarga62.id" />
+      </label>
+      <div class="field">
+        <span>Peran browser ini</span>
+        <div class="seg" role="group" aria-label="Peran" data-key="role">
+          <button type="button" data-value="host">Host</button>
+          <button type="button" data-value="guest">Guest</button>
+        </div>
+      </div>
+      <div class="field">
+        <span>Mode</span>
+        <div class="seg" role="group" aria-label="Mode" data-key="mode">
+          <button type="button" data-value="grind">Grinding XP</button>
+          <button type="button" data-value="arena">Arena pintar</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="Log terakhir">
+      <h2>Log terakhir</h2>
+      <pre id="logs" class="logs" tabindex="0">Belum ada log.</pre>
+    </section>
+
+    <footer>
+      <a id="open-options" href="#">Pengaturan lengkap</a>
+      <span class="muted">Akun sendiri, room privat.</span>
+    </footer>
+    <script src="popup.js"></script>
+  </body>
+</html>

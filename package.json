@@ -1,0 +1,40 @@
+{
+  "name": "warga62-autoplay",
+  "version": "2.0.0",
+  "description": "Bot auto-play untuk Warga +62 (game monopoli Indonesia) khusus room privat dengan akun milik sendiri: Chrome extension + Playwright runner.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "author": "ilramdhan",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ilramdhan/warga62-autoplay.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "warga62-runner": "src/runner/cli.js"
+  },
+  "scripts": {
+    "build": "node scripts/build.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint:md": "markdownlint-cli2 \"**/*.md\" \"#node_modules\" \"#dist\"",
+    "test": "node --test",
+    "validate": "node scripts/validate-manifest.js",
+    "check": "npm run lint && npm run format:check && npm test && npm run build && npm run validate",
+    "runner": "node src/runner/cli.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.0",
+    "eslint": "^10.1.0",
+    "markdownlint-cli2": "^0.23.0",
+    "prettier": "^3.8.0"
+  },
+  "dependencies": {
+    "playwright": "^1.63.0"
+  }
+}

@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pengaturan - Warga +62 Autoplay</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <header class="masthead">
+      <h1>Warga <span class="plus">+62</span> Autoplay</h1>
+      <p>Pengaturan lengkap bot. Perubahan baru berlaku setelah kamu menekan <b>Simpan</b>.</p>
+    </header>
+
+    <div class="notice" role="note">
+      <strong>Gunakan dengan bijak.</strong>
+      Alat ini hanya untuk akun milikmu sendiri di room <b>Privat</b> atau <b>Teman</b>. Jangan dipakai untuk bergabung
+      ke room publik atau mengganggu pemain lain.
+    </div>
+
+    <div class="layout">
+      <nav class="tabs" aria-label="Bagian pengaturan" id="tabs">
+        <button type="button" data-tab="akun" aria-selected="true">Akun</button>
+        <button type="button" data-tab="mode" aria-selected="false">Mode</button>
+        <button type="button" data-tab="room" aria-selected="false">Aturan room</button>
+        <button type="button" data-tab="capaian" aria-selected="false">Pencapaian</button>
+        <button type="button" data-tab="strategi" aria-selected="false">Strategi</button>
+        <button type="button" data-tab="chat" aria-selected="false">Chat &amp; stiker</button>
+        <button type="button" data-tab="timing" aria-selected="false">Timing</button>
+        <button type="button" data-tab="log" aria-selected="false">Log</button>
+        <button type="button" data-tab="impor" aria-selected="false">Impor / ekspor</button>
+      </nav>
+
+      <main>
+        <section id="tab-akun" class="tab">
+          <h2>Akun</h2>
+          <label class="field">
+            <span>Nick akun di browser ini</span>
+            <input
+              data-path="myName"
+              data-kind="text"
+              type="text"
+              list="nick-list"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </label>
+          <label class="field">
+            <span>Peran browser ini</span>
+            <select data-path="role">
+              <option value="host">Host (pembuat room)</option>
+              <option value="guest">Guest (diundang)</option>
+            </select>
+          </label>
+          <div class="field">
+            <span>Semua akun milikmu (2 sampai 8 nick)</span>
+            <ul id="accounts" class="chips"></ul>
+            <div class="row">
+              <input id="new-account" type="text" autocomplete="off" spellcheck="false" placeholder="nick baru" />
+              <button type="button" id="add-account" class="btn">Tambah</button>
+            </div>
+            <small id="accounts-count" class="hint"></small>
+          </div>
+          <label class="field">
+            <span>Nick host (undangan hanya diterima dari nick ini)</span>
+            <input
+              data-path="hostName"
+              data-kind="text"
+              type="text"
+              list="nick-list"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </label>
+          <label class="field">
+            <span>Nick pemenang (mode Grinding XP)</span>
+            <input
+              data-path="winnerName"
+              data-kind="text"
+              type="text"
+              list="nick-list"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </label>
+          <datalist id="nick-list"></datalist>
+        </section>
+
+        <section id="tab-mode" class="tab" hidden>
+          <h2>Mode</h2>
+          <label class="choice">
+            <input type="radio" name="mode" data-path="mode" value="grind" />
+            <span
+              ><b>Grinding XP</b><br />Satu akun (pemenang) dibuat menang, akun lain jadi pengumpan dan mengirim kasnya
+              ke pemenang.</span
+            >
+          </label>
+          <label class="choice">
+            <input type="radio" name="mode" data-path="mode" value="arena" />
+            <span
+              ><b>Arena pintar</b><br />Setiap akun bermain untuk menang sendiri dengan strategi penuh. Tidak ada kerja
+              sama antar akun.</span
+            >
+          </label>
+        </section>
+
+        <section id="tab-room" class="tab" hidden>
+          <h2>Aturan room</h2>
+          <p class="hint">Diterapkan oleh host saat membuat room. Akses hanya Privat atau Teman.</p>
+          <div class="grid">
+            <label class="field"
+              ><span>Akses</span>
+              <select data-path="room.access">
+                <option value="privat">Privat</option>
+                <option value="teman">Teman</option>
+              </select>
+            </label>
+            <label class="field"
+              ><span>Mode permainan</span>
+              <select data-path="room.mode">
+                <option value="survival">Survival</option>
+                <option value="ronde">Ronde</option>
+              </select>
+            </label>
+            <label class="field"
+              ><span>Tingkat kesulitan</span>
+              <select data-path="room.difficulty">
+                <option value="santai">Santai</option>
+                <option value="normal">Normal</option>
+                <option value="inflasi">Inflasi</option>
+                <option value="krismon">Krismon</option>
+              </select>
+            </label>
+            <label class="field"
+              ><span>Modal awal</span>
+              <select data-path="room.startingCash" data-kind="num">
+                <option value="5">Rp5 juta</option>
+                <option value="10">Rp10 juta</option>
+                <option value="15">Rp15 juta</option>
+              </select>
+            </label>
+            <label class="field"
+              ><span>Maks. pemain</span>
+              <select data-path="room.maxPlayers" data-kind="num">
+                <option value="4">4</option>
+                <option value="6">6</option>
+                <option value="8">8</option>
+              </select>
+            </label>
+            <label class="field"
+              ><span>Peta</span>
+              <select data-path="room.map">
+                <option value="pulau">Pulau</option>
+                <option value="kota-banjir">Kota Banjir</option>
+                <option value="ibu-kota-baru">Ibu Kota Baru</option>
+                <option value="desa-sawah">Desa Sawah</option>
+                <option value="acak">Acak</option>
+              </select>
+            </label>
+          </div>
+          <label class="check"><input type="checkbox" data-path="room.awards" /> Malam penghargaan</label>
+          <label class="check"
+            ><input type="checkbox" data-path="room.autoByAchievement" /> Atur otomatis sesuai target pencapaian (boleh
+            menimpa pilihan di atas)</label
+          >
+        </section>
+
+        <section id="tab-capaian" class="tab" hidden>
+          <h2>Pencapaian</h2>
+          <label class="check"><input type="checkbox" data-path="achievements.enabled" /> Kejar pencapaian</label>
+          <div id="ach-catalog" hidden>
+            <p class="hint">Pilih target. Kosongkan semua untuk pilihan otomatis.</p>
+            <div id="ach-list" class="ach-list"></div>
+          </div>
+          <label class="field" id="ach-free">
+            <span>Target pencapaian (satu id per baris; kosong = otomatis)</span>
+            <textarea data-path="achievements.targets" data-kind="lines" rows="6" spellcheck="false"></textarea>
+          </label>
+        </section>
+
+        <section id="tab-strategi" class="tab" hidden>
+          <h2>Strategi</h2>
+          <label class="field"
+            ><span>Toleransi risiko: <output id="risk-out"></output></span>
+            <input type="range" min="0" max="1" step="0.05" data-path="strategy.riskTolerance" data-kind="num" />
+            <small class="hint">Kiri = hati-hati, kanan = berani.</small>
+          </label>
+          <label class="field"
+            ><span>Cadangan kas (jumlah ronde sewa)</span>
+            <input type="number" min="0" max="10" step="0.25" data-path="strategy.reserveRounds" data-kind="num" />
+          </label>
+          <label class="field"
+            ><span>Bunga pinjaman ke teman</span>
+            <select data-path="strategy.lendInterest" data-kind="auto-num">
+              <option value="auto">Otomatis</option>
+              <option value="0">0%</option>
+              <option value="10">10%</option>
+              <option value="25">25%</option>
+              <option value="50">50%</option>
+            </select>
+          </label>
+          <label class="field"
+            ><span>Pinjol</span>
+            <select data-path="strategy.usePinjol">
+              <option value="auto">Otomatis</option>
+              <option value="never">Tidak pernah</option>
+              <option value="always">Selalu</option>
+            </select>
+          </label>
+        </section>
+
+        <section id="tab-chat" class="tab" hidden>
+          <h2>Chat &amp; stiker</h2>
+          <p class="hint">Hanya aktif di room milikmu sendiri yang berisi akun sendiri.</p>
+          <label class="check"><input type="checkbox" data-path="chat.enabled" /> Aktifkan chat otomatis</label>
+          <label class="check"><input type="checkbox" data-path="chat.stickers" /> Kirim stiker</label>
+          <label class="check"><input type="checkbox" data-path="chat.quickPhrases" /> Pakai pesan cepat bawaan</label>
+          <label class="field"
+            ><span>Kalimat sendiri (satu per baris)</span>
+            <textarea data-path="chat.customPhrases" data-kind="lines" rows="6"></textarea>
+          </label>
+        </section>
+
+        <section id="tab-timing" class="tab" hidden>
+          <h2>Timing</h2>
+          <p class="hint">Jeda hanya untuk menunggu animasi game. Satuan milidetik.</p>
+          <div class="grid">
+            <label class="field"
+              ><span>Interval cek (tick)</span
+              ><input type="number" min="50" step="50" data-path="timing.tickMs" data-kind="num"
+            /></label>
+            <label class="field"
+              ><span>Jeda aksi, minimum</span
+              ><input type="number" min="0" step="50" data-path="timing.actionDelayMs.0" data-kind="num"
+            /></label>
+            <label class="field"
+              ><span>Jeda aksi, maksimum</span
+              ><input type="number" min="0" step="50" data-path="timing.actionDelayMs.1" data-kind="num"
+            /></label>
+            <label class="field"
+              ><span>Jeda bangun per petak</span
+              ><input type="number" min="0" step="100" data-path="timing.buildDelayPerTileMs" data-kind="num"
+            /></label>
+            <label class="field"
+              ><span>Watchdog (muat ulang jika macet)</span
+              ><input type="number" min="30000" step="5000" data-path="timing.watchdogMs" data-kind="num"
+            /></label>
+            <label class="field"
+              ><span>Pemain minimum untuk mulai</span
+              ><input type="number" min="2" max="8" data-path="timing.minStartPlayers" data-kind="num"
+            /></label>
+            <label class="field"
+              ><span>Ulangi undangan setiap</span
+              ><input type="number" min="5000" step="1000" data-path="timing.inviteRetryMs" data-kind="num"
+            /></label>
+          </div>
+          <label class="check"><input type="checkbox" data-path="debug" /> Mode debug (log lebih rinci)</label>
+        </section>
+
+        <section id="tab-log" class="tab" hidden>
+          <h2>Log</h2>
+          <div class="row">
+            <button type="button" class="btn" id="log-refresh">Muat ulang</button>
+            <button type="button" class="btn" id="log-export">Ekspor JSON</button>
+            <button type="button" class="btn danger" id="log-clear">Hapus log</button>
+          </div>
+          <pre id="log-view" class="logview" tabindex="0">Belum ada log.</pre>
+        </section>
+
+        <section id="tab-impor" class="tab" hidden>
+          <h2>Impor / ekspor</h2>
+          <label class="field"
+            ><span>Konfigurasi (JSON)</span>
+            <textarea id="json-area" rows="14" spellcheck="false"></textarea>
+          </label>
+          <div class="row">
+            <button type="button" class="btn" id="json-export">Ekspor dari form</button>
+            <button type="button" class="btn" id="json-download">Unduh file</button>
+            <button type="button" class="btn" id="json-import">Terapkan JSON ke form</button>
+            <label class="btn file"
+              >Pilih file<input type="file" id="json-file" accept="application/json,.json" hidden
+            /></label>
+          </div>
+          <hr />
+          <button type="button" class="btn danger" id="reset">Kembalikan ke bawaan</button>
+        </section>
+      </main>
+    </div>
+
+    <div class="savebar">
+      <ul id="errors" class="errors" role="alert" hidden></ul>
+      <div class="row">
+        <button type="button" class="btn primary" id="save">Simpan</button>
+        <span id="save-state" class="hint" role="status"></span>
+      </div>
+    </div>
+    <script src="options.js"></script>
+  </body>
+</html>

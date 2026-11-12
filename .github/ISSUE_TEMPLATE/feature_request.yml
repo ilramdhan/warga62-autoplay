@@ -1,0 +1,31 @@
+name: Usulan fitur
+description: Usulkan fitur baru atau peningkatan
+title: '[Fitur] '
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Fitur yang melanggar aturan integritas game tidak akan diterima. Lihat CONTRIBUTING.md.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Masalah atau kebutuhan
+      description: Apa yang sulit dilakukan sekarang?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Usulan solusi
+    validations:
+      required: true
+  - type: checkboxes
+    id: integrity
+    attributes:
+      label: Konfirmasi
+      options:
+        - label: Usulan ini tidak memakai prediksi RNG, fitur anti-deteksi, atau bergabung ke room publik.
+          required: true
+        - label: Usulan ini hanya bekerja lewat UI dan hanya untuk akun milik sendiri di room privat.
+          required: true

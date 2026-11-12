@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+.runner-profiles/
+runner.config.json
+*.log
+.DS_Store
+*.zip
+.env

@@ -1,0 +1,264 @@
+/**
+ * Loop utama bot: baca state, pilih handler pertama yang cocok, jalankan, jaga watchdog, kirim status.
+ */
+import { validateConfig } from './config.js';
+import * as dom from './dom/query.js';
+import * as act from './dom/act.js';
+import { readGame, readMe, playersOf } from './state/reader.js';
+import { buildView } from './state/view.js';
+import { createPolicy } from './strategy/index.js';
+import { handlers as allHandlers } from './handlers/index.js';
+import { createChat } from './social/chat.js';
+
+const STATUS_GAP_MS = 1000;
+const GAME_GAP_MS = 10000;
+
+export const isActivePath = (p) => p === '/' || p === '/online' || p === '/online/' || p.startsWith('/room/');
+
+/** Scope yang berlaku untuk path/kondisi saat ini. */
+export function scopesFor(path, inLobbyNow) {
+  const s = new Set(['any']);
+  if (path === '/' || path.startsWith('/online')) s.add('home');
+  else if (path.startsWith('/room/')) s.add(inLobbyNow ? 'lobby' : 'game');
+  return s;
+}
+
+function rankingOf(game) {
+  const raw = Array.isArray(game?.ranking) ? game.ranking : null;
+  if (raw) return raw.map((r) => (r && typeof r === 'object' ? { ...r } : r));
+  return playersOf(game)
+    .map((p) => ({ id: p.id, name: p.name, cash: p.cash, bankrupt: !!p.bankrupt }))
+    .sort((a, b) => Number(a.bankrupt) - Number(b.bankrupt) || (b.cash ?? 0) - (a.cash ?? 0))
+    .map((p, i) => ({ rank: i + 1, ...p }));
+}
+
+/**
+ * @param {{getConfig: () => object, emit: (e: object) => void, log: object, handlers?: object[]}} deps
+ */
+export function createEngine({ getConfig, emit, log, handlers = allHandlers }) {
+  const list = [...handlers].sort((a, b) => a.priority - b.priority);
+  const chat = createChat({ getConfig, dom, act, log });
+  let timer = null;
+  let running = false;
+  let busy = false;
+  let memo = {};
+  let policy = null;
+  let policyCfg = null;
+  let validatedCfg = null;
+  let configOk = true;
+  let hiddenLogged = false;
+  let lastActionAt = Date.now();
+  let lastAction = null;
+  let lastStatusAt = 0;
+  let status = {
+    type: 'status',
+    state: 'idle',
+    handler: null,
+    round: null,
+    phase: null,
+    myCash: null,
+    lastAction: null,
+  };
+  let prev = { path: null, phase: null, round: null, gameSeenAt: 0 };
+  let gameOverEmitted = false;
+
+  const sendStatus = (patch, force = false) => {
+    status = { ...status, ...patch, type: 'status', lastAction };
+    const now = Date.now();
+    if (!force && now - lastStatusAt < STATUS_GAP_MS) return;
+    lastStatusAt = now;
+    emit({ ...status, ts: now });
+  };
+
+  // log yang juga mencatat aksi terakhir
+  const ctxLog = {
+    info: (m) => {
+      lastAction = { ...(lastAction ?? {}), msg: m, ts: Date.now() };
+      log.info(m);
+    },
+    warn: (m) => log.warn(m),
+    error: (m) => log.error(m),
+    debug: (m) => log.debug(m),
+  };
+
+  function policyFor(cfg) {
+    if (policyCfg !== cfg) {
+      policyCfg = cfg;
+      try {
+        policy = createPolicy(cfg);
+      } catch (e) {
+        policy = null;
+        log.error(`Gagal membuat strategi: ${e?.message ?? e}`);
+      }
+    }
+    return policy;
+  }
+
+  function trackGame(game, path, now) {
+    const newGame =
+      prev.path !== path ||
+      (game && now - prev.gameSeenAt > GAME_GAP_MS) ||
+      (game && prev.phase === 'game_over' && game.phase !== 'game_over') ||
+      (game && Number.isFinite(prev.round) && Number.isFinite(game.round) && game.round < prev.round);
+    if (newGame && prev.path !== null) {
+      memo = {};
+      chat.reset();
+      gameOverEmitted = false;
+    }
+    prev = {
+      path,
+      phase: game ? game.phase : prev.phase,
+      round: game ? game.round : prev.round,
+      gameSeenAt: game ? now : prev.gameSeenAt,
+    };
+    if (game?.phase === 'game_over' && !gameOverEmitted) {
+      gameOverEmitted = true;
+      const ranking = rankingOf(game);
+      emit({ type: 'game_over', ts: now, round: game.round ?? null, ranking });
+      log.info('Game selesai.');
+    } else if (game && game.phase !== 'game_over') gameOverEmitted = false;
+  }
+
+  async function tick() {
+    if (busy || !running) return;
+    busy = true;
+    try {
+      const cfg = getConfig();
+      const now = Date.now();
+      if (!cfg.enabled) return sendStatus({ state: 'paused', handler: null });
+      if (validatedCfg !== cfg) {
+        validatedCfg = cfg;
+        const errs = validateConfig(cfg);
+        configOk = errs.length === 0;
+        errs.forEach((e) => log.error(`Konfigurasi: ${e}`));
+      }
+      if (!configOk) return sendStatus({ state: 'paused', handler: null });
+      if (document.hidden) {
+        if (!hiddenLogged) {
+          hiddenLogged = true;
+          log.info('Tab tidak terlihat; bot dijeda sampai tab aktif lagi.');
+        }
+        return sendStatus({ state: 'paused', handler: null });
+      }
+      hiddenLogged = false;
+      const path = location.pathname;
+      if (!isActivePath(path)) return sendStatus({ state: 'idle', handler: null });
+
+      const game = readGame();
+      const me = game ? readMe(game, cfg) : null;
+      let view = null;
+      if (game) {
+        try {
+          view = buildView(game, me?.id ?? null, cfg);
+        } catch (e) {
+          log.debug(`buildView gagal: ${e?.message ?? e}`);
+        }
+      }
+      trackGame(game, path, now);
+      chat.observe(game);
+
+      const ctx = {
+        cfg,
+        game,
+        me,
+        view,
+        policy: policyFor(cfg),
+        dom,
+        act,
+        log: ctxLog,
+        memo,
+        emit,
+        now: () => Date.now(),
+        chat,
+      };
+      dom.invalidate();
+      const scopes = scopesFor(path, dom.inLobby());
+      let chosen = null;
+      let detected = null;
+      for (const h of list) {
+        if (!scopes.has(h.scope)) continue;
+        try {
+          const d = h.detect(ctx);
+          if (d) {
+            chosen = h;
+            detected = d;
+            break;
+          }
+        } catch (e) {
+          log.debug(`detect ${h.id} gagal: ${e?.message ?? e}`);
+        }
+      }
+
+      const base = { round: game?.round ?? null, phase: game?.phase ?? null, myCash: me?.cash ?? null };
+      if (chosen) {
+        sendStatus({ ...base, state: 'acting', handler: chosen.id });
+        let result;
+        try {
+          result = await chosen.run(ctx, detected);
+        } catch (e) {
+          log.error(`Handler ${chosen.id} galat: ${e?.message ?? e}`);
+          result = false;
+        }
+        if (result !== false) {
+          lastActionAt = Date.now();
+          lastAction = { handler: chosen.id, msg: lastAction?.msg ?? null, ts: lastActionAt };
+        }
+        sendStatus({ ...base, state: result === false ? 'waiting' : 'acting', handler: chosen.id });
+      } else {
+        let chatted = false;
+        try {
+          chatted = await chat.flush();
+        } catch (e) {
+          log.debug(`chat gagal: ${e?.message ?? e}`);
+        }
+        if (chatted) lastActionAt = Date.now();
+        sendStatus({ ...base, state: 'waiting', handler: null });
+      }
+
+      const guestIdle = cfg.role === 'guest' && (path === '/' || path.startsWith('/online'));
+      if (!guestIdle && Date.now() - lastActionAt > cfg.timing.watchdogMs) {
+        log.warn('Tidak ada aksi terlalu lama; kembali ke beranda.');
+        lastActionAt = Date.now();
+        memo = {};
+        act.goHome(0);
+      }
+    } catch (e) {
+      log.error(`Galat loop: ${e?.message ?? e}`);
+    } finally {
+      busy = false;
+    }
+  }
+
+  function schedule() {
+    if (!running) return;
+    const ms = getConfig().timing?.tickMs ?? 350;
+    timer = setTimeout(async () => {
+      await tick();
+      schedule();
+    }, ms);
+  }
+
+  return {
+    start() {
+      if (running) return;
+      running = true;
+      lastActionAt = Date.now();
+      log.info('Bot dimulai.');
+      schedule();
+    },
+    stop() {
+      running = false;
+      clearTimeout(timer);
+      sendStatus({ state: 'paused', handler: null }, true);
+      log.info('Bot dihentikan.');
+    },
+    reset() {
+      memo = {};
+      chat.reset();
+      lastActionAt = Date.now();
+      gameOverEmitted = false;
+    },
+    getStatus: () => status,
+    tick,
+  };
+}

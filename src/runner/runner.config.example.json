@@ -1,0 +1,29 @@
+{
+  "headless": true,
+  "accounts": ["akun.utama", "akun.dua", "akun.tiga"],
+  "hostName": "akun.utama",
+  "winnerName": "akun.dua",
+  "mode": "grind",
+  "room": {
+    "access": "privat",
+    "mode": "survival",
+    "difficulty": "normal",
+    "startingCash": 10,
+    "maxPlayers": 4,
+    "map": "acak",
+    "awards": true,
+    "autoByAchievement": true
+  },
+  "achievements": { "enabled": true, "targets": [] },
+  "strategy": { "riskTolerance": 0.5, "reserveRounds": 1, "lendInterest": "auto", "usePinjol": "auto" },
+  "chat": { "enabled": true, "stickers": true, "quickPhrases": true, "customPhrases": [] },
+  "timing": {
+    "tickMs": 350,
+    "actionDelayMs": [250, 700],
+    "buildDelayPerTileMs": 1200,
+    "watchdogMs": 180000,
+    "minStartPlayers": 2,
+    "inviteRetryMs": 45000
+  },
+  "debug": false
+}

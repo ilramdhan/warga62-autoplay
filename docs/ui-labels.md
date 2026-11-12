@@ -1,0 +1,43 @@
+# Label UI yang sudah diverifikasi (Nov 2026)
+
+Teks tombol dirender **UPPERCASE lewat CSS**. Selalu bandingkan `textContent` yang dinormalisasi (lowercase, spasi dirapikan), jangan `innerText`.
+Elemen bisa `<button>` **atau `<a>`** (contoh: "Main Online" di beranda adalah link).
+
+## Beranda / online / lobby
+
+| Situasi | Elemen | Catatan |
+|---|---|---|
+| Beranda `/` | link `Main Online` | |
+| Halaman `/online` | tombol `Buat room` | Langsung membuat room dan masuk ruang tunggu. Ada juga input kode + `Masuk`, dan daftar "Room publik" (JANGAN disentuh). |
+| Ruang tunggu `/room/KODE` | `Bagikan link` / `Link tersalin`, `Undang teman`, `Umumkan di Discord`, `Ganti`, `Atur`, `Mulai main` (disabled sampai ≥2 pemain), `← Keluar dari room` | Teks "Butuh minimal 2 pemain." |
+| Modal Undang teman | judul `Undang teman`, per teman: nama + tombol `Undang` → `Terundang`, tombol `Tutup` | Hanya teman online & tidak sedang main. |
+| Modal Aturan main (`Atur`) | Segmented: Akses `Publik/Teman/Privat`; Mode `Survival/Ronde` (Ronde: 10/15/20); Tingkat `Santai/Normal/Inflasi/Krismon`; Modal `Rp5 jt/Rp10 jt/Rp15 jt`; Maks pemain `4 orang/6 orang/8 orang`; Peta `Pulau/Kota Banjir/Ibu Kota Baru/Desa Sawah/Acak`; Malam penghargaan `Ada/Lewati`; tombol `Selesai`/`Tutup` | "Langsung tersimpan." Tombol aktif biasanya `aria-pressed="true"` atau `aria-checked`; verifikasi dengan membaca kembali `game.settings`/teks. |
+| Chat ruang tunggu | kalimat cepat: `Halo, warga!`, `Tunggu satu lagi`, `Gas, mulai!`, `Bentar, ngopi dulu`, `Mulai dong, Host`, `Siap bangkrut?`; tombol `Stiker`; input `Tulis pesan…` + `Kirim` | |
+| Undangan masuk (pihak guest, di halaman mana pun) | modal judul `<nama> mengajak mabar`, tombol `Tutup`/`Nanti`, `Gabung` | Terima hanya dari `hostName`. |
+| Halaman gabung `/room/KODE` | tombol `Gabung` (`Menghubungkan…` saat proses) | Bedakan dari `Gabung server Discord`. |
+
+## Dalam game
+
+| Fase / situasi | Tombol | Aksi game |
+|---|---|---|
+| Urutan main | `Lempar ulang` (seri), `Mulai main`, `Lanjut` | |
+| Dok giliran (pre_roll) | `Kirim / minta uang`, `Tukar tanah`, `Bayar jaminan Rp…`, `Gadai kota`, `Tebus gadai`, `Bayar utang`, tombol kocok | Hilang setelah dadu dilempar. |
+| Kocok | `<button aria-label="Kocok dadu: tahan, lalu lepas untuk melempar">` teks `Tahan untuk kocok` / `Lepas untuk lempar!`; mode ketuk: aria `Kocok dadu: ketuk …`, teks `Ketuk untuk kocok` / `Ketuk lagi untuk lempar!` | Jarum = `div.absolute` di `button.previousElementSibling`, posisi di `style.left` (%). Enter keydown = mulai, keyup = lepas (mode ketuk: keydown dua kali). Zona: Cupu <40%, Perfect 85–91%. Jarum bergerak 0→100→0 tiap 1000 ms, mulai acak 0–30%. |
+| Modal kirim/minta uang | segmented `Kirim uang` / `Minta uang`; daftar pemain (tombol berisi nama + kas); stepper `aria-label="Kurangi"` / `aria-label="Tambah"` (step Rp100 rb, maks = kas); preset `Rp100 rb`…`Rp5 jt`; submit `Pilih pemainnya dulu` → `Kirim Rp…` / `Minta Rp…`; `Tutup` | |
+| Permintaan uang masuk | judul `<nama> minta uang`, `Tolak`, `Kirim Rp…` (atau `Kasmu kurang`) | |
+| Beli tanah (awaiting_buy) | `Tidak beli`, `Beli Rp…`, opsional `Flash Sale: beli Rp…` | |
+| Ambil alih (awaiting_takeover) | judul `Ambil alih kota?`, `Tidak usah`, `Ambil alih Rp…` | |
+| Gerbang tol (awaiting_toll) | judul `Masuk Gerbang Tol …`; tiap opsi tombol berisi nama gerbang + `N petak ke depan` | |
+| Bangun (awaiting_upgrade) | checkbox per kota, `Tidak bangun`, `Pilih kota` (disabled) / `Bangun Rp…`; teks `Uangmu tidak cukup.` | Animasi bangun lebih lama bila banyak kota. |
+| Kartu terbuka | `Lanjut` (disabled sampai animasi selesai) | |
+| Kartu pilihan (awaiting_choice) | tombol per opsi, mis. `Bayar Rp500 rb` / `Urus sesuai prosedur (lewati 2 giliran)` | Urutan tombol = urutan `options`. |
+| Kartu simpanan (awaiting_keep) | `Pakai …` / `Tidak usah`; Joki Dadu: modal "ketuk dadu untuk memutar angkanya", tombol `Jalan ke <petak>` atau `Pakai Joki, jalan ke …` | |
+| Pilih kota / pemain (awaiting_pick) | judul `Pilih kota.` / `Pilih pemain.`; tombol per kota/pemain; `Lewati` | |
+| Pengadilan | `Pakai Pengacara Kenalan`, `Pakai Orang Dalam: batalkan perkara`, `Kocok dadu sekarang` | |
+| Gali Lubang (debt) | langkah 1: `Jual +Rp…`, `Gadai +Rp…`; langkah 2: `Minta pinjaman`, `Ambil Pinjol`, `Bangkrut` → `Yakin bangkrut?` `Batal` / `Ya, bangkrut` | Teks `Kas minus Rp…`, `Bangunan dan tanahmu sudah habis. Pilih satu:` |
+| Tawaran pinjaman (awaiting_loan) | Peminjam: `Terima N%`, `Tidak jadi, pilih lagi` / `Tidak jadi, bangkrut`. Pemberi: tombol bunga `0%` `10%` `25%` `50%` (`aria-pressed`) lalu `Tawarkan` / `Ubah` | |
+| Tukar tanah masuk | `Tolak`, `Terima tawaran` | |
+| Tebus gadai | `Tebus Rp…` | |
+| AFK | `Aku kembali` | |
+| Game selesai | `Lewati N/M` (sekali per akun, jangan klik ulang), lalu `Lanjut`; host: `Mulai lagi` (fallback `Main lagi`); juga `Keluar dari room`, `Bagikan hasil`, `Simpan gambar` | |
+| Error | `Muat ulang`, `Cari room lain` | Kembali ke beranda dan ulang. |

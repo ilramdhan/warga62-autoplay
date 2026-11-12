@@ -1,0 +1,6 @@
+dist/
+node_modules/
+coverage/
+.runner-profiles/
+package-lock.json
+*.zip

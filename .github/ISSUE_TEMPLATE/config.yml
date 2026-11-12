@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Laporkan kerentanan keamanan
+    url: https://github.com/ilramdhan/warga62-autoplay/security/advisories/new
+    about: Jangan melaporkan kerentanan lewat issue publik. Gunakan laporan privat ini.
