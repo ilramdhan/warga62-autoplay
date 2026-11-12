@@ -208,3 +208,31 @@ a {
     transition: none !important;
   }
 }
+
+.players {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.warn {
+  margin-top: 8px;
+  padding: 8px;
+  border: 2px solid var(--merah);
+  background: var(--paper-2);
+  overflow-wrap: anywhere;
+}
+.warn p {
+  margin: 0 0 6px;
+}
+.adopt {
+  width: 100%;
+  padding: 6px 8px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  border: 2px solid var(--ink);
+  background: var(--sun);
+  color: var(--ink);
+}
+[hidden] {
+  display: none !important;
+}

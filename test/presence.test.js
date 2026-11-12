@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { foreignPlayers } from '../src/core/engine.js';
 import { textHasName, nameInText, combinePresence, nameFromTitle } from '../src/core/handlers/util.js';
 
 test('textHasName: nama utuh, tanpa beda huruf, bukan potongan nick lain', () => {
@@ -50,4 +51,9 @@ test('textHasName: titik akhir kalimat & huruf berdiakritik', () => {
 test('combinePresence: notifikasi "X keluar"/"X bergabung" bukan bukti hadir', () => {
   const r = combinePresence({ others: ['JULE'], texts: ['jule keluar', 'jule bergabung ke room'] });
   assert.deepEqual(r.present, []);
+});
+
+test('foreignPlayers: pemain di luar daftar akun terdeteksi, tanpa beda huruf', () => {
+  assert.deepEqual(foreignPlayers(['JULE', 'akun3', 'Orang'], ['jule', 'AKUN3']), ['Orang']);
+  assert.deepEqual(foreignPlayers([], ['a']), []);
 });

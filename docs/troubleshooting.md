@@ -35,3 +35,12 @@ Flag ini hanya mengatur throttling browser. Flag ini tidak menyembunyikan apa pu
 ## Dua host bentrok di profil Chrome yang sama
 
 Satu profil browser hanya boleh menjalankan satu peran, yaitu host atau guest. Buat profil Chrome terpisah untuk setiap akun.
+
+## Mengaktifkan bot di tengah game
+
+Bot boleh dinyalakan kapan saja, termasuk setelah game dimulai, dan mode (Grinding XP ↔ Arena pintar) boleh diganti
+di tengah pertandingan: keputusan berikutnya langsung memakai mode baru.
+
+- Guest cukup isi **nick sendiri** di popup. Nick sendiri, host, dan pemenang otomatis masuk daftar akun.
+- Bila ada pemain lain di game yang belum terdaftar, bot **dijeda** (bot hanya main melawan akun milikmu sendiri).
+  Popup menampilkan nama-namanya; klik **Semua pemain ini akun saya** bila memang semuanya akunmu.

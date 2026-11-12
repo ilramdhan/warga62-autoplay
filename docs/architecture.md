@@ -66,8 +66,9 @@ test/                  # node:test
   myName: '',                 // nick akun di instance ini (WAJIB)
   role: 'host' | 'guest',     // host = pembuat room
   mode: 'grind' | 'arena',
-  accounts: ['ilramdhan.dev', 'JULE'],   // semua nick milik user (2–8). Host mengundang selain dirinya.
-  hostName: 'ilramdhan.dev',  // undangan hanya diterima dari nick ini
+  accounts: ['ilramdhan.dev', 'JULE'],   // semua nick milik user (1–8). myName, hostName, dan (grind) winnerName
+                                         // otomatis ditambahkan. Host mengundang selain dirinya.
+  hostName: 'ilramdhan.dev',  // undangan hanya diterima dari nick ini. Boleh kosong untuk guest (tanpa auto-terima).
   winnerName: 'JULE',         // mode grind: akun yang dibuat menang
   room: {                     // diterapkan host lewat tombol "Atur"
     access: 'privat' | 'teman',
@@ -97,6 +98,10 @@ test/                  # node:test
 - Bot hanya aktif di path `/`, `/online`, `/room/*`. Halaman lain (`/profil`, `/cara-main`, dll.) diabaikan, kecuali handler `profile-sync` yang hanya membaca.
 
 ## Status & event (bot → host)
+
+Pengaman integritas di engine: bila game terbaca dan ada pemain yang tidak ada di `cfg.accounts`, bot dijeda
+(`status.state = 'paused'`, `reason = 'foreign'`, `players[]`, `foreign[]`) dan tidak melakukan aksi apa pun.
+Popup menampilkan daftar pemain dan tombol untuk mendaftarkan nama itu bila memang akun milik user sendiri.
 
 `host.emit(event)` dengan `event = { type: 'log'|'status'|'error'|'game_over'|'achievement', ts, ...payload }`.
 Extension meneruskan ke `chrome.storage.session` (status) dan ring buffer log (maks 500). Runner mencetak ke stdout.

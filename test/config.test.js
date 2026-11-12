@@ -52,7 +52,7 @@ test('validateConfig: config valid', () => {
 
 test('validateConfig: galat umum', () => {
   assert.ok(validateConfig({ ...valid(), myName: '' }).some((e) => /myName/.test(e)));
-  assert.ok(validateConfig({ ...valid(), accounts: ['ilramdhan.dev'] }).some((e) => /2 sampai 8/.test(e)));
+  assert.ok(validateConfig({ ...valid(), accounts: [] }).some((e) => /1 sampai 8/.test(e)));
   assert.ok(validateConfig({ ...valid(), hostName: 'orang' }).some((e) => /Host/.test(e)));
   assert.ok(validateConfig({ ...valid(), winnerName: 'orang' }).some((e) => /Pemenang/.test(e)));
   assert.ok(validateConfig({ ...valid(), role: 'guest' }).some((e) => /guest/.test(e)));
@@ -79,4 +79,43 @@ test('validateConfig: akses room hanya privat/teman', () => {
 test('validateConfig: tahan input aneh', () => {
   assert.ok(validateConfig(null).length > 0);
   assert.ok(validateConfig({}).length > 0);
+});
+
+test('normalizeConfig: nick sendiri, host, pemenang otomatis masuk daftar akun', () => {
+  const c = normalizeConfig({
+    myName: 'B',
+    role: 'guest',
+    mode: 'grind',
+    hostName: 'A',
+    winnerName: 'C',
+    accounts: [],
+  });
+  assert.deepEqual(c.accounts, ['B', 'A', 'C']);
+  const arena = normalizeConfig({
+    myName: 'B',
+    role: 'guest',
+    mode: 'arena',
+    hostName: 'A',
+    winnerName: 'C',
+    accounts: [],
+  });
+  assert.deepEqual(arena.accounts, ['B', 'A'], 'pemenang tidak ditambahkan di mode arena');
+  assert.equal(normalizeConfig({ myName: 'H', role: 'host', hostName: '' }).hostName, 'H', 'host: hostName = myName');
+});
+
+test('validateConfig: guest arena cukup nick sendiri (gabung manual di tengah game)', () => {
+  const c = normalizeConfig({ myName: 'B', role: 'guest', mode: 'arena', hostName: '', accounts: [] });
+  assert.deepEqual(validateConfig(c), []);
+  const host = normalizeConfig({
+    myName: 'H',
+    hostName: 'H',
+    role: 'host',
+    mode: 'arena',
+    accounts: [],
+    timing: { minStartPlayers: 2 },
+  });
+  assert.ok(
+    validateConfig(host).some((e) => /Minimal pemain/.test(e)),
+    'host tetap butuh akun untuk diundang',
+  );
 });

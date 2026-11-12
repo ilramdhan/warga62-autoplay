@@ -13,6 +13,12 @@ import { createChat } from './social/chat.js';
 const STATUS_GAP_MS = 1000;
 const GAME_GAP_MS = 10000;
 
+/** Nama pemain yang bukan akun milik user (tanpa beda huruf besar/kecil). */
+export function foreignPlayers(players, accounts) {
+  const own = new Set((accounts ?? []).map((n) => String(n).trim().toLowerCase()));
+  return players.filter((n) => !own.has(String(n).trim().toLowerCase()));
+}
+
 export const isActivePath = (p) => p === '/' || p === '/online' || p === '/online/' || p.startsWith('/room/');
 
 /** Scope yang berlaku untuk path/kondisi saat ini. */
@@ -47,6 +53,8 @@ export function createEngine({ getConfig, emit, log, handlers = allHandlers }) {
   let validatedCfg = null;
   let configOk = true;
   let hiddenLogged = false;
+  let foreignLogged = null;
+  let progressSig = null;
   let lastActionAt = Date.now();
   let lastAction = null;
   let lastStatusAt = 0;
@@ -119,30 +127,36 @@ export function createEngine({ getConfig, emit, log, handlers = allHandlers }) {
     } else if (game && game.phase !== 'game_over') gameOverEmitted = false;
   }
 
+  /** Bot sedang tidak bertindak (mati/jeda): watchdog tidak boleh menghitung waktu ini sebagai macet. */
+  const idle = (patch) => {
+    lastActionAt = Date.now();
+    return sendStatus(patch);
+  };
+
   async function tick() {
     if (busy || !running) return;
     busy = true;
     try {
       const cfg = getConfig();
       const now = Date.now();
-      if (!cfg.enabled) return sendStatus({ state: 'paused', handler: null });
+      if (!cfg.enabled) return idle({ state: 'paused', handler: null, reason: 'off' });
       if (validatedCfg !== cfg) {
         validatedCfg = cfg;
         const errs = validateConfig(cfg);
         configOk = errs.length === 0;
         errs.forEach((e) => log.error(`Konfigurasi: ${e}`));
       }
-      if (!configOk) return sendStatus({ state: 'paused', handler: null });
+      if (!configOk) return idle({ state: 'paused', handler: null, reason: 'config' });
       if (document.hidden) {
         if (!hiddenLogged) {
           hiddenLogged = true;
           log.info('Tab tidak terlihat; bot dijeda sampai tab aktif lagi.');
         }
-        return sendStatus({ state: 'paused', handler: null });
+        return idle({ state: 'paused', handler: null, reason: 'hidden' });
       }
       hiddenLogged = false;
       const path = location.pathname;
-      if (!isActivePath(path)) return sendStatus({ state: 'idle', handler: null });
+      if (!isActivePath(path)) return idle({ state: 'idle', handler: null, reason: null });
 
       const game = readGame();
       const me = game ? readMe(game, cfg) : null;
@@ -155,6 +169,34 @@ export function createEngine({ getConfig, emit, log, handlers = allHandlers }) {
         }
       }
       trackGame(game, path, now);
+
+      // Pengaman integritas: bot hanya bermain bila SEMUA pemain adalah akun milik user (cfg.accounts).
+      const players = playersOf(game)
+        .map((p) => String(p.name ?? '').trim())
+        .filter(Boolean);
+      const foreign = foreignPlayers(players, cfg.accounts);
+      if (foreign.length) {
+        const key = foreign.join('|');
+        if (foreignLogged !== key) {
+          foreignLogged = key;
+          log.warn(
+            `Bot dijeda: pemain ${foreign.join(', ')} tidak terdaftar sebagai akunmu. Tambahkan di popup bila memang akunmu.`,
+          );
+        }
+        return idle({ state: 'paused', handler: null, reason: 'foreign', players, foreign });
+      }
+      foreignLogged = null;
+      // Game yang bergerak (giliran/fase/ronde/kas berubah) = tidak macet, walau bot sendiri belum beraksi
+      // (mis. menunggu giliran pemain lain yang dimainkan manual, atau bot baru diaktifkan di tengah game).
+      const sig = game
+        ? [game.phase, game.round, game.currentPlayer, ...playersOf(game).map((p) => `${p.cash}:${p.position}`)].join(
+            '|',
+          )
+        : null;
+      if (sig !== progressSig) {
+        progressSig = sig;
+        if (sig) lastActionAt = Date.now();
+      }
       chat.observe(game);
 
       const ctx = {
@@ -189,7 +231,14 @@ export function createEngine({ getConfig, emit, log, handlers = allHandlers }) {
         }
       }
 
-      const base = { round: game?.round ?? null, phase: game?.phase ?? null, myCash: me?.cash ?? null };
+      const base = {
+        round: game?.round ?? null,
+        phase: game?.phase ?? null,
+        myCash: me?.cash ?? null,
+        reason: null,
+        players,
+        foreign: [],
+      };
       if (chosen) {
         sendStatus({ ...base, state: 'acting', handler: chosen.id });
         let result;

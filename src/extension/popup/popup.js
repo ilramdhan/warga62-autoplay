@@ -12,6 +12,7 @@ import {
 
 const $ = (id) => document.getElementById(id);
 let config = null;
+let foreignNames = [];
 
 function showError(msgs) {
   const el = $('err');
@@ -43,12 +44,45 @@ function renderStatus(s) {
   $('s-round').textContent = txt(f.round);
   $('s-phase').textContent = txt(f.phase);
   $('s-cash').textContent = formatRupiah(f.cash);
+  renderPlayers(f);
   if (f.at) {
     const sec = Math.max(0, Math.round((Date.now() - f.at) / 1000));
     $('s-age').textContent = `Update terakhir ${sec} detik lalu.`;
   } else {
     $('s-age').textContent = 'Belum ada data dari halaman game. Buka mainwarga62.id.';
   }
+}
+
+function renderPlayers(f) {
+  $('players-panel').hidden = !f.players.length;
+  $('players-list').textContent = f.players.join(', ');
+  $('foreign-box').hidden = !f.foreign.length;
+  if (f.foreign.length) {
+    $('foreign-msg').textContent =
+      `Bot dijeda: ada pemain yang belum terdaftar sebagai akunmu (${f.foreign.join(', ')}). ` +
+      'Bot hanya boleh main melawan akun milikmu sendiri.';
+  } else {
+    $('adopt-err').hidden = true;
+  }
+  foreignNames = f.foreign;
+}
+
+async function adoptForeign() {
+  const names = foreignNames;
+  if (!names.length) return;
+  if (!window.confirm(`Pastikan SEMUA pemain berikut akun milikmu sendiri: ${names.join(', ')}. Lanjutkan?`)) return;
+  const accounts = [...(config.accounts || [])];
+  for (const n of names) {
+    if (!accounts.some((a) => a.toLowerCase() === n.toLowerCase())) accounts.push(n);
+  }
+  const err = $('adopt-err');
+  if (accounts.length > 8) {
+    err.textContent = 'Akun melebihi batas 8 nick. Kurangi daftar akun di Pengaturan lengkap.';
+    err.hidden = false;
+    return;
+  }
+  err.hidden = true;
+  await update({ accounts });
 }
 
 async function renderLogs() {
@@ -83,6 +117,7 @@ async function init() {
   await refresh();
 
   $('toggle').addEventListener('click', () => update({ enabled: !config.enabled }));
+  $('adopt').addEventListener('click', adoptForeign);
   $('myName').addEventListener('change', (e) => update({ myName: e.target.value.trim() }));
   for (const seg of document.querySelectorAll('.seg')) {
     seg.addEventListener('click', (e) => {

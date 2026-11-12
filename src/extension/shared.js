@@ -64,6 +64,9 @@ export function statusFields(s) {
     handler: src.handler ?? src.lastHandler ?? null,
     round: src.round ?? null,
     phase: src.phase ?? null,
+    reason: src.reason ?? null,
+    players: Array.isArray(src.players) ? src.players.map(String) : [],
+    foreign: Array.isArray(src.foreign) ? src.foreign.map(String) : [],
     cash: src.cash ?? me.cash ?? null,
     at: (s && (s.receivedAt || s.ts)) || null,
   };
