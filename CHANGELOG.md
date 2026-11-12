@@ -4,6 +4,13 @@ Semua perubahan penting pada proyek ini dicatat di berkas ini.
 
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/), dan proyek ini memakai [Semantic Versioning](https://semver.org/lang/id/).
 
+## [2.1.4](https://github.com/ilramdhan/warga62-autoplay/compare/v2.1.3...v2.1.4) (2026-11-12)
+
+
+### Bug Fixes
+
+* role selalu tersimpan di popup; default grind = Survival cepat ([d52b1f5](https://github.com/ilramdhan/warga62-autoplay/commit/d52b1f50d5474632773e8ca4c59147af3050cefb))
+
 ## [2.1.3](https://github.com/ilramdhan/warga62-autoplay/compare/v2.1.2...v2.1.3) (2026-11-12)
 
 
