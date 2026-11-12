@@ -119,28 +119,32 @@ async function doSend(ctx, action) {
       .slice(0, 8);
     return giveUp(`Kirim uang: pemain "${toName}" tidak ketemu di modal (tombol: ${seen.join(' | ') || '-'}).`);
   }
+  // Terpilih = tombol pemain ber-aria-pressed, atau status submit bukan "Pilih pemainnya dulu".
+  // Konfirmasi bisa telat (round-trip server), jadi beri waktu lebih dan coba beberapa kali.
   const status = () => labelOf(findButton(SEND_STATUS, box, { enabledOnly: false }));
-  const picked = () => !/^pilih pemainnya dulu/.test(status());
-  for (let i = 0; i < 2 && !picked(); i++) {
-    // Beberapa build merender tombol pemain dengan elemen anak; coba klik elemen terdalam bila klik pertama gagal.
+  const picked = () => target.getAttribute('aria-pressed') === 'true' || !/^pilih pemainnya dulu/.test(status());
+  for (let i = 0; i < 3 && !picked(); i++) {
     ctx.act.click(i === 0 ? target : (target.querySelector('span, div, p') ?? target));
-    await ctx.act.waitFor(picked, { timeout: 1200 });
+    await ctx.act.waitFor(picked, { timeout: 2500 });
   }
   if (!picked()) return giveUp(`Kirim uang: gagal memilih "${toName}" (status: ${status() || '-'}).`);
 
   const cash = ctx.me?.cash;
   const wantAll = !Number.isFinite(action.amount) || (Number.isFinite(cash) && action.amount >= cash);
+  // PENTING: ambil ulang tombol Tambah tiap iterasi — React bisa mengganti elemennya, dan referensi
+  // lama (isConnected=false) membuat loop berhenti setelah 1 klik ("jumlah tidak bertambah").
   const plusBtn = () => findButtonByAria('tambah', box, { enabledOnly: false });
   if (!plusBtn()) return giveUp('Kirim uang: tombol Tambah tidak ditemukan.');
-  if (wantAll) await ctx.act.pressPlusUntilMax(plusBtn());
-  else {
-    for (let i = 0; i < 400; i++) {
+  for (let i = 0; i < 600; i++) {
+    const pb = plusBtn();
+    if (!pb || ctx.dom.isDisabled(pb)) break;
+    if (!wantAll) {
       const submit = findButton(SUBMIT_SEND, box, { enabledOnly: false });
       const current = submit ? (parseRupiah(labelOf(submit)) ?? 0) : 0;
-      if (current >= action.amount || ctx.dom.isDisabled(plusBtn())) break;
-      plusBtn().click();
-      await ctx.act.sleep(12);
+      if (current >= action.amount) break;
     }
+    pb.click();
+    await ctx.act.sleep(15);
   }
   await ctx.act.sleep(250);
   const send = findButton(SUBMIT_SEND, box);

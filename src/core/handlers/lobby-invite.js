@@ -96,10 +96,10 @@ export default {
         const name = rowNameOf(btn);
         if (!name || invited.includes(name)) continue;
         ctx.act.click(btn);
-        // Satu klik cukup; perubahan ke "Terundang" bisa agak telat. Jangan klik ganda.
+        // Satu klik cukup; konfirmasi "Terundang" datang dari server (~2–4 dtk). Jangan klik ganda.
         const ok = await ctx.act.waitFor(
           () => !btn.isConnected || TERUNDANG.test(labelOf(btn)) || ctx.dom.isDisabled(btn),
-          { timeout: 3500 },
+          { timeout: 6000 },
         );
         invited.push(ok ? name : `${name} (?)`);
         await ctx.act.sleep(300);
