@@ -28,17 +28,24 @@ Buka **Settings > Rules > Rulesets** (atau **Branches** untuk aturan klasik), la
 - Require status checks to pass, dan pilih job **check** dari workflow CI.
 - Block force pushes.
 
+## Izin workflow (WAJIB untuk rilis otomatis)
+
+Buka **Settings > Actions > General**, bagian **Workflow permissions**, lalu:
+
+- Centang **Allow GitHub Actions to create and approve pull requests**.
+
+Tanpa ini, workflow **Release** (release-please) gagal dengan pesan
+_"GitHub Actions is not permitted to create or approve pull requests"_ karena ia perlu membuat "release PR".
+
 ## Sinkronisasi label
 
 Label didefinisikan di `.github/labels.yml`. Workflow **Sync labels** berjalan otomatis setiap ada push ke `main` yang mengubah file itu. Untuk menjalankannya manual, buka tab **Actions**, pilih **Sync labels**, lalu klik **Run workflow**.
 
-## Rilis
+## Rilis (release-please otomatis)
 
-Workflow **Release** berjalan saat tag `v*` didorong. Contoh:
+Rilis diatur otomatis oleh **release-please** berdasarkan pesan commit Conventional (`feat:`, `fix:`, dst.):
 
-```bash
-git tag v2.0.0
-git push origin v2.0.0
-```
+1. Setiap push ke `main`, workflow **Release** membuat atau memperbarui sebuah **release PR** berjudul seperti _"chore: release 2.1.0"_ yang menaikkan versi di `package.json` dan menulis `CHANGELOG.md`.
+2. Saat kamu **merge release PR** itu, release-please membuat tag `v*`, GitHub Release, lalu melampirkan `warga62-autoplay-extension-v<versi>.zip` secara otomatis.
 
-Workflow ini membuat GitHub Release dan melampirkan `warga62-autoplay-extension.zip`.
+Tidak perlu membuat tag manual. Versi awal yang dilacak ada di `.release-please-manifest.json`.
