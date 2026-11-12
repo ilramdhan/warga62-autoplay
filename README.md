@@ -17,7 +17,7 @@ Bot auto-play untuk **[Warga +62](https://mainwarga62.id)**, game monopoli satir
   - **Arena pintar** (2–8 akun milikmu): setiap akun bermain untuk menang sendiri-sendiri. Keputusannya memperhitungkan nilai tanah, monopoli provinsi, risiko sewa lawan, fase Krisis, tingkat kesulitan, pinjaman antar pemain (bunga 0/10/25/50%), dan Pinjol.
 - **Kocokan Perfect otomatis**: membaca posisi jarum di setiap frame, jadi tepat di zona ★ dan tidak bergantung ukuran layar.
 - **Semua modal ditangani**: kartu Takdir/Musibah/Krisis, kartu pilihan, Joki Dadu, gerbang tol, pengadilan, Lapas, bangun saat gajian, ambil alih, Gali Lubang (jual/gadai/pinjam/Pinjol/bangkrut), tukar tanah, permintaan uang, layar akhir (`Lewati N/M` → `Lanjut` → `Mulai lagi`).
-- **Atur room otomatis** lewat tombol *Atur*: akses, mode, tingkat, modal, jumlah pemain, peta, dan malam penghargaan. Room selalu Privat atau Teman.
+- **Atur room otomatis** lewat tombol _Atur_: akses, mode, tingkat, modal, jumlah pemain, peta, dan malam penghargaan. Room selalu Privat atau Teman.
 - **Perencana pencapaian**: memilih aturan room dan perilaku bot untuk mengejar pencapaian di halaman Profil, misalnya Segala cuaca, Turis Domestik, atau Napi Teladan.
 - **Chat & stiker** di room sendiri (opsional), misalnya stiker otomatis saat ada yang bangkrut.
 - **Tahan banting**: watchdog, kembali ke beranda saat error atau macet, penanganan AFK (`Aku kembali`), dan auto-retry.
@@ -57,16 +57,16 @@ Detail: [docs/runner.md](docs/runner.md)
 
 ## Dokumentasi
 
-| Dokumen | Isi |
-|---|---|
-| [docs/architecture.md](docs/architecture.md) | Arsitektur & kontrak modul |
-| [docs/strategy.md](docs/strategy.md) | Cara bot mengambil keputusan |
-| [docs/achievements.md](docs/achievements.md) | Pencapaian yang bisa diotomatisasi |
-| [docs/ui-labels.md](docs/ui-labels.md) | Label tombol & fakta DOM game |
-| [docs/handlers.md](docs/handlers.md) | Daftar handler modal |
-| [docs/troubleshooting.md](docs/troubleshooting.md) | Masalah umum |
-| [docs/responsible-use.md](docs/responsible-use.md) | Gunakan dengan bijak |
-| [CLAUDE.md](CLAUDE.md) | Konteks proyek untuk AI & kontributor |
+| Dokumen                                            | Isi                                   |
+| -------------------------------------------------- | ------------------------------------- |
+| [docs/architecture.md](docs/architecture.md)       | Arsitektur & kontrak modul            |
+| [docs/strategy.md](docs/strategy.md)               | Cara bot mengambil keputusan          |
+| [docs/achievements.md](docs/achievements.md)       | Pencapaian yang bisa diotomatisasi    |
+| [docs/ui-labels.md](docs/ui-labels.md)             | Label tombol & fakta DOM game         |
+| [docs/handlers.md](docs/handlers.md)               | Daftar handler modal                  |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | Masalah umum                          |
+| [docs/responsible-use.md](docs/responsible-use.md) | Gunakan dengan bijak                  |
+| [CLAUDE.md](CLAUDE.md)                             | Konteks proyek untuk AI & kontributor |
 
 ## Struktur
 

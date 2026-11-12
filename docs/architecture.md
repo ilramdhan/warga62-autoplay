@@ -124,10 +124,14 @@ game.rules (aturan aktif, termasuk perubahan dari kartu Krisis), game.loans[], g
 /** @type {Handler} */
 export default {
   id: 'buy',
-  scope: 'game',          // 'home' | 'lobby' | 'game' | 'any'
-  priority: 50,           // lebih kecil = dicek lebih dulu
-  detect(ctx) { /* return falsy atau objek deteksi */ },
-  async run(ctx, detected) { /* lakukan SATU keputusan lalu return */ },
+  scope: 'game', // 'home' | 'lobby' | 'game' | 'any'
+  priority: 50, // lebih kecil = dicek lebih dulu
+  detect(ctx) {
+    /* return falsy atau objek deteksi */
+  },
+  async run(ctx, detected) {
+    /* lakukan SATU keputusan lalu return */
+  },
 };
 ```
 

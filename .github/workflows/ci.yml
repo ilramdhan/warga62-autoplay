@@ -22,13 +22,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          # Ganti ke package-lock.json setelah lockfile di-commit.
-          cache-dependency-path: package.json
+          # Cache npm diaktifkan otomatis hanya jika ada package-lock.json.
+          cache: ${{ hashFiles('package-lock.json') != '' && 'npm' || '' }}
 
       - name: Install dependencies
         run: |
-          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+          if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
 
       - name: Lint
         run: npm run lint

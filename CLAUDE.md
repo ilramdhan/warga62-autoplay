@@ -14,19 +14,19 @@ Bot auto-play untuk **Warga +62** (game monopoli Indonesia, https://mainwarga62.
 
 ## Peta kode
 
-| Path | Isi |
-|---|---|
-| `src/core/entry-page.js` | Entry bundle `bot.js` (MAIN world). Terima config, buat bot, kirim event. |
-| `src/core/engine.js` | Loop, pemilihan handler, watchdog, AFK, pemulihan error. |
-| `src/core/handlers/` | Satu file per situasi layar (beli, tol, gadai, lobby, …). Urutan di `handlers/index.js`. |
-| `src/core/strategy/` | Keputusan murni: `grind.js`, `smart.js`, `risk.js`, `planner.js`. |
-| `src/core/state/` | `reader.js` membaca state game dari React fiber; `view.js` data turunan untuk strategi. |
-| `src/core/data/` | Data papan, kartu, pencapaian. |
-| `src/core/dom/` | Helper query/klik/kocok/rupiah. |
-| `src/extension/` | manifest, bridge (ISOLATED), popup, options, background. |
-| `src/runner/` | CLI Playwright (`login`, `run`, `doctor`). |
-| `scripts/` | build (esbuild), validasi manifest, ikon. |
-| `test/` | `node:test`, tanpa dependency. |
+| Path                     | Isi                                                                                      |
+| ------------------------ | ---------------------------------------------------------------------------------------- |
+| `src/core/entry-page.js` | Entry bundle `bot.js` (MAIN world). Terima config, buat bot, kirim event.                |
+| `src/core/engine.js`     | Loop, pemilihan handler, watchdog, AFK, pemulihan error.                                 |
+| `src/core/handlers/`     | Satu file per situasi layar (beli, tol, gadai, lobby, …). Urutan di `handlers/index.js`. |
+| `src/core/strategy/`     | Keputusan murni: `grind.js`, `smart.js`, `risk.js`, `planner.js`.                        |
+| `src/core/state/`        | `reader.js` membaca state game dari React fiber; `view.js` data turunan untuk strategi.  |
+| `src/core/data/`         | Data papan, kartu, pencapaian.                                                           |
+| `src/core/dom/`          | Helper query/klik/kocok/rupiah.                                                          |
+| `src/extension/`         | manifest, bridge (ISOLATED), popup, options, background.                                 |
+| `src/runner/`            | CLI Playwright (`login`, `run`, `doctor`).                                               |
+| `scripts/`               | build (esbuild), validasi manifest, ikon.                                                |
+| `test/`                  | `node:test`, tanpa dependency.                                                           |
 
 ## Perintah
 

@@ -1,10 +1,25 @@
 version: 2
 updates:
+  # Satu PR gabungan per minggu untuk dependency npm (mengurangi banjir PR).
   - package-ecosystem: npm
     directory: '/'
     schedule:
       interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-dependencies:
+        patterns: ['*']
+    commit-message:
+      prefix: 'chore'
+      include: scope
+  # Satu PR gabungan per minggu untuk versi GitHub Actions.
   - package-ecosystem: github-actions
     directory: '/'
     schedule:
       interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns: ['*']
+    commit-message:
+      prefix: 'ci'
