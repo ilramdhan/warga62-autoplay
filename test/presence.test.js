@@ -74,3 +74,12 @@ test('joki dadu: simpulkan dadu dari batas total (putaran berurutan atau acak)',
   assert.equal(planForFirstDie([4, 3], null), null);
   assert.equal(planForFirstDie([4, 3], { dieIndex: 0, value: 4 }), null, 'tidak berubah');
 });
+
+test('nameInParts: teks anak tergabung tanpa spasi tetap cocok (regresi kirim uang & undang)', async () => {
+  const { nameInParts } = await import('../src/core/handlers/util.js');
+  assert.equal(nameInParts(['JULE', 'Rp5 jt'], 'JULERp5 jt', ['JULE']), 'JULE');
+  assert.equal(nameInParts(['Selebgram Endorse', 'JULE', 'Online'], 'Selebgram EndorseJULEOnline', ['JULE']), 'JULE');
+  assert.equal(nameInParts([], 'julerp5 jt', ['JULE']), 'JULE', 'fallback includes');
+  assert.equal(nameInParts(['JULES', 'Online'], 'JULESOnline', ['JULE', 'JULES']), 'JULES');
+  assert.equal(nameInParts(['Orang'], 'Orang', ['JULE']), null);
+});

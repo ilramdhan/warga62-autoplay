@@ -1,4 +1,4 @@
-import { nowMs, lobbyPresence, nameInText, throttle } from './util.js';
+import { nowMs, lobbyPresence, nameInElement, throttle } from './util.js';
 
 const UNDANG = /^undang$/;
 const TERUNDANG = /^terundang$/;
@@ -83,7 +83,7 @@ export default {
           if (buttons(p).filter((b) => UNDANG.test(labelOf(b)) || TERUNDANG.test(labelOf(b))).length !== 1) break;
           row = p;
         }
-        return nameInText(row.textContent, wanted);
+        return nameInElement(row, wanted);
       };
 
       const invited = [];

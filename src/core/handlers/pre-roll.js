@@ -4,7 +4,7 @@ import {
   findPlayerById,
   findPlayerByName,
   isMyTurnOrUnknown,
-  textHasName,
+  nameInElement,
   throttle,
   tileIndexFromText,
 } from './util.js';
@@ -108,7 +108,7 @@ async function doSend(ctx, action) {
     });
   const target = await ctx.act.waitFor(
     () => {
-      const list = candidates().filter((b) => textHasName(labelOf(b), toName));
+      const list = candidates().filter((b) => nameInElement(b, [toName]) != null);
       return list.sort((a, b) => labelOf(a).length - labelOf(b).length)[0] ?? null;
     },
     { timeout: 2500 },

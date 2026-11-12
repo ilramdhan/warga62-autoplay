@@ -17,8 +17,12 @@ export default {
     if (!title) return null;
     const from = nameFromTitle(title.textContent, 'mabar');
     if (!from) return null;
-    // Kotak modal = leluhur terdekat yang memuat tombol Gabung atau Tutup/Nanti (bukan sekadar ≥2 tombol).
-    const box = climb(title, (p) => findButton(ACCEPT, p, { enabledOnly: false }) || findButton(DECLINE, p)) ?? null;
+    // Kotak modal: utamakan leluhur yang memuat tombol Gabung (bisa ada ikon "Tutup" lebih dekat ke judul
+    // yang tidak memuat Gabung); fallback leluhur dengan Tutup/Nanti untuk menolak.
+    const box =
+      climb(title, (p) => !!findButton(ACCEPT, p, { enabledOnly: false })) ??
+      climb(title, (p) => !!findButton(DECLINE, p, { enabledOnly: false })) ??
+      null;
     return box ? { from, box } : null;
   },
   async run(ctx, { from, box }) {
@@ -39,8 +43,11 @@ export default {
     // Sudah di ruang tunggu bersama host: undangan ulang tidak perlu (hindari keluar-masuk room).
     const withHost = lobby && lobbyPresence(ctx).present.some((n) => norm(n) === norm(ctx.cfg.hostName));
     if (ctx.cfg.role === 'guest' && fromHost && !playing && !withHost) {
-      const join = findButton(ACCEPT, box);
-      if (!join) return false; // tombol masih "Menghubungkan…"/nonaktif: tunggu
+      const join = findButton(ACCEPT, box) || findButton(ACCEPT);
+      if (!join) {
+        if (throttle(ctx, 'invite-wait', 10000)) ctx.log.info(`Undangan dari ${from}: menunggu tombol Gabung aktif.`);
+        return false; // tombol masih "Menghubungkan…"/nonaktif: tunggu
+      }
       if (!throttle(ctx, 'invite-gabung', 3000)) return false;
       ctx.act.click(join);
       ctx.log.info(`Menerima undangan dari ${from}.`);

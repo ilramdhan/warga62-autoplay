@@ -194,6 +194,32 @@ export function textHasName(text, name) {
   return new RegExp(`(?<!${NAME_CHAR})${esc(n)}(?=\\.?(?!${NAME_CHAR}))`, 'u').test(norm(text));
 }
 
+/**
+ * Nama dari `wanted` yang ada di sebuah elemen. textContent menggabungkan teks anak TANPA spasi
+ * ("JULE" + "Rp5 jt" → "julerp5 jt"), jadi cek tiap text node dulu (nama utuh), lalu teks gabungan
+ * (nama utuh), lalu fallback `includes` (perilaku lama). Nama terpanjang dulu.
+ */
+export function nameInElement(el, wanted) {
+  if (!el) return null;
+  const names = [...wanted].sort((a, b) => norm(b).length - norm(a).length);
+  const parts = [];
+  if (typeof document !== 'undefined' && el.nodeType === 1) {
+    const walker = document.createTreeWalker(el, 4 /* NodeFilter.SHOW_TEXT */);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) if (n.nodeValue.trim()) parts.push(n.nodeValue);
+  }
+  return nameInParts(parts, el.textContent ?? '', names);
+}
+
+/** Bagian murni dari nameInElement (bisa diuji tanpa DOM). */
+export function nameInParts(parts, joined, names) {
+  return (
+    names.find((n) => parts.some((t) => textHasName(t, n))) ??
+    names.find((n) => textHasName(joined, n)) ??
+    names.find((n) => norm(n) && norm(joined).includes(norm(n))) ??
+    null
+  );
+}
+
 /** Nama akun (dari `wanted`) yang muncul utuh di `text`; nama terpanjang dulu agar "JULE" tak kalah oleh "JUL". */
 export function nameInText(text, wanted) {
   return [...wanted].sort((a, b) => norm(b).length - norm(a).length).find((n) => textHasName(text, n)) ?? null;
@@ -255,6 +281,8 @@ function lobbyTexts(dom, skip) {
     if (raw.length > 80 || el.closest('script, style, input, textarea, ' + NOT_LOBBY)) continue;
     if (skip.some((b) => b && b.contains(el)) || !dom.isVisible(el)) continue;
     out.push(norm(raw));
+    const own = norm(node.nodeValue);
+    if (own && own !== norm(raw)) out.push(own); // teks gabungan tanpa spasi tidak menyembunyikan nama
   }
   return out;
 }
