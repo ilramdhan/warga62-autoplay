@@ -1,4 +1,4 @@
-import { nowMs, lobbyPresence, throttle } from './util.js';
+import { nowMs, lobbyPresence, throttle, inviteModalBox } from './util.js';
 
 /**
  * Ruang tunggu (host): "Mulai main" bila cukup akun hadir — semua akun, atau minimal
@@ -10,7 +10,7 @@ export default {
   scope: 'lobby',
   priority: 84,
   detect(ctx) {
-    if (ctx.cfg.role !== 'host' || !ctx.dom.inLobby() || ctx.dom.findLeaf('undang teman')) return null;
+    if (ctx.cfg.role !== 'host' || !ctx.dom.inLobby() || inviteModalBox(ctx.dom)) return null;
     return ctx.dom.findButton('mulai main');
   },
   async run(ctx, btn) {
