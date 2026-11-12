@@ -4,6 +4,13 @@ Semua perubahan penting pada proyek ini dicatat di berkas ini.
 
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/), dan proyek ini memakai [Semantic Versioning](https://semver.org/lang/id/).
 
+## [2.1.2](https://github.com/ilramdhan/warga62-autoplay/compare/v2.1.1...v2.1.2) (2026-11-12)
+
+
+### Bug Fixes
+
+* **lobby:** label "N ronde" untuk Batas ronde; retry invite 20s ([317f678](https://github.com/ilramdhan/warga62-autoplay/commit/317f6785ea2410727fd5c07f648115d5b70dfdc8))
+
 ## [2.1.1](https://github.com/ilramdhan/warga62-autoplay/compare/v2.1.0...v2.1.1) (2026-11-12)
 
 
