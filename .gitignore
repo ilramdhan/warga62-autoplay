@@ -7,3 +7,6 @@ runner.config.json
 .DS_Store
 *.zip
 .env
+
+# Log bot yang diekspor pengguna
+.claude/warga62-log*.json

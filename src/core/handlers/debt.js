@@ -3,8 +3,8 @@ import { ask, nowMs, rowOfButton, throttle, tileIndexFromText } from './util.js'
 
 const SELL = /^jual \+\s*rp/;
 const MORTGAGE = /^gadai \+\s*rp/;
-const LOAN = /^minta pinjaman/;
-const PINJOL = /^ambil pinjol/;
+const LOAN = /^(minta|ajukan) pinjaman/;
+const PINJOL = /^(ambil|pakai|ajukan) pinjol/;
 const BANKRUPT = /^bangkrut$/;
 const CONFIRM = /^ya,? bangkrut/;
 
@@ -14,9 +14,12 @@ export default {
   scope: 'game',
   priority: 30,
   detect(ctx) {
-    const { findButton, findLeaf } = ctx.dom;
+    const { findButton, findButtons, findLeaf } = ctx.dom;
+    // Tawaran pinjaman sedang ditampilkan: biarkan handler loan-offer yang memutuskan.
+    if (findButtons(/^terima \d+\s*%/).length) return null;
+    // Hanya dari tombol yang terlihat: fase 'debt' saja tidak cukup (bisa utang pemain lain, atau layar
+    // "X bangkrut … Lanjut" masih fase debt) dan akan memblokir handler lain karena run() tak bisa apa-apa.
     return (
-      ctx.game?.phase === 'debt' ||
       findButton(CONFIRM) ||
       findButton(SELL) ||
       findButton(MORTGAGE) ||
@@ -60,13 +63,14 @@ export default {
     const owe = oweText ? Math.abs(parseRupiah(oweText.textContent) ?? 0) : Math.max(0, -(ctx.me?.cash ?? 0));
     // Cegah loop: setelah "Minta pinjaman" ditolak ("Tidak jadi, pilih lagi") policy jangan diminta
     // mengulang requestLoan. Jejak ini auto-reset antar-episode (kadaluarsa 15 dtk) & saat game baru.
-    const triedLoan = now - (ctx.memo.debtTriedLoanAt ?? 0) < 15000;
+    const triedLoan = now - (ctx.memo.debtTriedLoanAt ?? 0) < 45000;
     const info = {
       owe,
       canSell: sellTiles.filter((t) => t != null),
       canMortgage: mortgageTiles.filter((t) => t != null),
       canLoan: !!loan && !triedLoan,
       canPinjol: !!pinjol,
+      pinjolSeen: !!findButton(PINJOL, document, { enabledOnly: false }),
       triedLoan,
     };
 
@@ -102,8 +106,14 @@ export default {
     if (!target || !throttle(ctx, 'debt', 1200)) return false;
     if (target === bankrupt) ctx.memo.bankruptIntent = now;
     if (target === loan) ctx.memo.debtTriedLoanAt = now;
+    ctx.memo.debtCanPinjol = !!pinjol;
+    ctx.memo.debtOwe = owe;
     ctx.act.click(target);
-    ctx.log.info(`Gali Lubang: ${labelOf(target)}.`);
+    const reason = ctx.policy?.lastReason ? ` (${ctx.policy.lastReason})` : '';
+    const seen = [sells.length && 'jual', mortgages.length && 'gadai', loan && 'pinjaman', pinjol && 'pinjol']
+      .filter(Boolean)
+      .join('/');
+    ctx.log.info(`Gali Lubang: ${labelOf(target)}${reason}. Opsi terlihat: ${seen || 'bangkrut saja'}.`);
     await ctx.act.sleep(900);
     return true;
   },

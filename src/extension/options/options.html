@@ -27,6 +27,7 @@
         <button type="button" data-tab="strategi" aria-selected="false">Strategi</button>
         <button type="button" data-tab="chat" aria-selected="false">Chat &amp; stiker</button>
         <button type="button" data-tab="timing" aria-selected="false">Timing</button>
+        <button type="button" data-tab="monitor" aria-selected="false">Monitor</button>
         <button type="button" data-tab="log" aria-selected="false">Log</button>
         <button type="button" data-tab="impor" aria-selected="false">Impor / ekspor</button>
       </nav>
@@ -259,6 +260,46 @@
             /></label>
           </div>
           <label class="check"><input type="checkbox" data-path="debug" /> Mode debug (log lebih rinci)</label>
+        </section>
+
+        <section id="tab-monitor" class="tab" hidden>
+          <h2>Monitor</h2>
+          <p id="mon-empty" class="hint">Belum ada game terbaca. Buka tab game dan mulai bot.</p>
+          <div id="mon-body" hidden>
+            <p id="mon-head" class="mon-head"></p>
+            <div class="mon-card">
+              <h3>Posisi saya</h3>
+              <dl id="mon-me" class="mon-me"></dl>
+              <p id="mon-stance" class="mon-stance"></p>
+            </div>
+            <h3>Strategi saat ini</h3>
+            <ul id="mon-strategy" class="mon-list"></ul>
+            <h3>Lawan</h3>
+            <div class="mon-scroll">
+              <table class="mon-table" id="mon-opp">
+                <thead>
+                  <tr>
+                    <th scope="col">Nama</th>
+                    <th scope="col">Kas</th>
+                    <th scope="col">Kekayaan</th>
+                    <th scope="col">Kota</th>
+                    <th scope="col">Bangunan</th>
+                    <th scope="col">Gadai</th>
+                    <th scope="col">Provinsi lengkap</th>
+                    <th scope="col">Hampir lengkap</th>
+                    <th scope="col">Ancaman ke saya</th>
+                    <th scope="col">Gaya</th>
+                    <th scope="col">Tren</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <h3>Catatan</h3>
+            <ul id="mon-notes" class="mon-list"></ul>
+            <h3>Keputusan terakhir</h3>
+            <ul id="mon-decisions" class="mon-list"></ul>
+          </div>
         </section>
 
         <section id="tab-log" class="tab" hidden>

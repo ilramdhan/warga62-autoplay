@@ -57,3 +57,20 @@ test('foreignPlayers: pemain di luar daftar akun terdeteksi, tanpa beda huruf', 
   assert.deepEqual(foreignPlayers(['JULE', 'akun3', 'Orang'], ['jule', 'AKUN3']), ['Orang']);
   assert.deepEqual(foreignPlayers([], ['a']), []);
 });
+
+test('joki dadu: simpulkan dadu dari batas total (putaran berurutan atau acak)', async () => {
+  const { inferDice, secondDieBounds, planForFirstDie } = await import('../src/core/handlers/joki-dadu.js');
+  // asli (4,3)=7; dadu 1 → 1 dan 6 terlihat: total 4 dan 9 → dadu 2 = 3
+  assert.deepEqual(inferDice(7, [4, 9]), [4, 3]);
+  assert.deepEqual(secondDieBounds(7, [8]), { lo: 2, hi: 6 });
+  assert.equal(inferDice(7, [8, 7]), null, 'belum pasti');
+  assert.deepEqual(inferDice(12, []), [6, 6], 'total 12 pasti 6+6');
+  assert.deepEqual(inferDice(2, []), [1, 1]);
+  assert.equal(inferDice(null, [3]), null);
+  // rencana dadu 2 diubah jadi dadu 1 dengan total & status kembar sama
+  assert.equal(planForFirstDie([4, 3], { dieIndex: 0, value: 6 }), 6);
+  assert.equal(planForFirstDie([4, 3], { dieIndex: 1, value: 5 }), 6, '4+5=9 → 6+3');
+  assert.equal(planForFirstDie([4, 3], { dieIndex: 1, value: 4 }), null, 'kembar 4+4 tak bisa lewat dadu 1');
+  assert.equal(planForFirstDie([4, 3], null), null);
+  assert.equal(planForFirstDie([4, 3], { dieIndex: 0, value: 4 }), null, 'tidak berubah');
+});

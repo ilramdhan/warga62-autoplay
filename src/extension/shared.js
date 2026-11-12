@@ -68,6 +68,8 @@ export function statusFields(s) {
     players: Array.isArray(src.players) ? src.players.map(String) : [],
     foreign: Array.isArray(src.foreign) ? src.foreign.map(String) : [],
     cash: src.cash ?? me.cash ?? null,
+    insight: src.insight && typeof src.insight === 'object' ? src.insight : null,
+    decisions: Array.isArray(src.decisions) ? src.decisions : [],
     at: (s && (s.receivedAt || s.ts)) || null,
   };
 }

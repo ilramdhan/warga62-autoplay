@@ -32,14 +32,23 @@ export default {
           interestPercent: percentFromText(labelOf(b)),
         };
       });
-      const picked = ask(ctx, 'acceptLoan', null, { offers });
+      // Info dari Gali Lubang: apakah tombol Pinjol benar-benar tersedia & berapa kekurangannya.
+      const picked = ask(ctx, 'acceptLoan', null, {
+        offers,
+        canPinjol: ctx.memo.debtCanPinjol,
+        owe: ctx.memo.debtOwe,
+      });
       const i = picked == null ? -1 : offers.findIndex((o) => o.lender === String(picked));
       await ctx.act.pause(ctx.cfg.timing.actionDelayMs);
       if (i >= 0) {
         ctx.act.click(d.accepts[i]);
         ctx.log.info(`Pinjaman diterima: ${labelOf(d.accepts[i])}.`);
       } else {
-        const no = findButton(/^tidak jadi/);
+        // Utamakan "Tidak jadi, pilih lagi" (kembali ke Gali Lubang → Pinjol); jangan sampai klik "…, bangkrut".
+        const no =
+          findButton(/^tidak jadi,? pilih lagi/) ||
+          findButton(/^tidak jadi(?!,? bangkrut)/) ||
+          findButton(/^tidak jadi/);
         if (!no) return false;
         ctx.act.click(no);
         ctx.log.info(`Pinjaman ditolak: ${labelOf(no)}.`);

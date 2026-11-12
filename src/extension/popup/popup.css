@@ -236,3 +236,13 @@ a {
 [hidden] {
   display: none !important;
 }
+
+.mon-line {
+  margin: 0 0 4px;
+  font-weight: 700;
+}
+.mon-opps {
+  margin: 0 0 6px;
+  padding-left: 16px;
+  overflow-wrap: anywhere;
+}

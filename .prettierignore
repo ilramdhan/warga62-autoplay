@@ -6,3 +6,4 @@ package-lock.json
 *.zip
 # Dikelola oleh release-please, bukan Prettier
 CHANGELOG.md
+.claude/warga62-log*.json

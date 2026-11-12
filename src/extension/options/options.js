@@ -1,6 +1,17 @@
 import { DEFAULT_CONFIG, normalizeConfig } from '../../core/config.js';
 import * as achModule from 'w62-achievements'; // alias esbuild: src/core/data/achievements.js atau stub kosong
-import { KEYS, loadConfig, saveConfig, errorsOf, loadLogs, onStorageChange, logLine } from '../shared.js';
+import {
+  KEYS,
+  loadConfig,
+  saveConfig,
+  errorsOf,
+  loadLogs,
+  onStorageChange,
+  logLine,
+  loadStatus,
+  statusFields,
+  formatRupiah,
+} from '../shared.js';
 
 const $ = (id) => document.getElementById(id);
 const fields = () => [...document.querySelectorAll('[data-path]')];
@@ -221,6 +232,96 @@ async function renderLogs() {
   $('log-view').textContent = logs.length ? logs.map(logLine).join('\n') : 'Belum ada log.';
 }
 
+// ---- monitor ---------------------------------------------------------------
+function h(tag, text, cls) {
+  const e = document.createElement(tag);
+  if (text !== undefined && text !== null) e.textContent = text;
+  if (cls) e.className = cls;
+  return e;
+}
+const TREND = { naik: '▲', turun: '▼', stabil: '▬' };
+const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+const clock = (ts) => new Date(ts).toTimeString().slice(0, 8);
+
+function fillList(ul, lines, empty) {
+  ul.replaceChildren(...(lines.length ? lines.map((t) => h('li', t)) : [h('li', empty, 'muted')]));
+}
+
+function oppRows(o, leader) {
+  const name = h('th', null, 'mon-name');
+  name.scope = 'row';
+  const nm = h('span', o.name);
+  if (o.bankrupt) nm.className = 'mon-bankrupt';
+  name.append(nm);
+  if (o.own) name.append(' (akunmu)');
+  if (leader && o.name === leader) name.append(' 👑');
+  if (o.jailed) name.append(' ', h('span', 'Lapas', 'mon-tag'));
+  const list = (a) => (Array.isArray(a) && a.length ? a.join(', ') : '-');
+  const row = h('tr');
+  row.append(
+    name,
+    h('td', formatRupiah(o.cash)),
+    h('td', formatRupiah(o.netWorth) + (num(o.loanDebt) > 0 ? ` (utang ${formatRupiah(o.loanDebt)})` : '')),
+    h('td', num(o.cities)),
+    h('td', num(o.buildings)),
+    h('td', num(o.mortgaged)),
+    h('td', list(o.provinces)),
+    h('td', list(o.nearProvinces)),
+    h('td', formatRupiah(o.threat)),
+    h('td', o.style || '-'),
+    h('td', TREND[o.trend] || TREND.stabil),
+  );
+  const rows = [row];
+  if (Array.isArray(o.changes) && o.changes.length) {
+    const d = h('tr', null, 'mon-detail');
+    const td = h('td', o.changes.join(' · '));
+    td.colSpan = 11;
+    d.append(td);
+    rows.push(d);
+  }
+  return rows;
+}
+
+async function renderMonitor() {
+  const f = statusFields(await loadStatus());
+  const ins = f.insight;
+  $('mon-empty').hidden = Boolean(ins);
+  $('mon-body').hidden = !ins;
+  if (!ins) return;
+  const head = $('mon-head');
+  head.replaceChildren(
+    `Ronde ${ins.round ?? '-'} · ${ins.mode === 'grind' ? 'Grinding XP' : 'Arena pintar'} · Tingkat ${ins.difficulty || '-'}`,
+  );
+  if (ins.crisis) head.append(' ', h('span', 'Krisis aktif', 'mon-tag mon-crisis'));
+  const me = ins.me || {};
+  const dl = $('mon-me');
+  dl.replaceChildren();
+  for (const [k, v] of [
+    ['Kas', me.cash],
+    ['Kekayaan bersih', me.netWorth],
+    ['Cadangan', me.reserve],
+    ['Perkiraan biaya 2 giliran', me.exposure],
+    ...(num(me.loanDebt) > 0 ? [['Utang', me.loanDebt]] : []),
+  ]) {
+    const d = h('div');
+    d.append(h('dt', k), h('dd', formatRupiah(v)));
+    dl.append(d);
+  }
+  const st = $('mon-stance');
+  st.replaceChildren(h('span', me.stance || '-', `mon-tag mon-stance-${me.stance || 'seimbang'}`));
+  if (me.stanceWhy) st.append(' ', me.stanceWhy);
+  fillList($('mon-strategy'), ins.strategy || [], 'Belum ada.');
+  const opps = [...(ins.opponents || [])];
+  $('mon-opp').tBodies[0].replaceChildren(...opps.flatMap((o) => oppRows(o, ins.leaderName)));
+  fillList($('mon-notes'), ins.notes || [], 'Tidak ada catatan.');
+  const ds = [...f.decisions].reverse();
+  fillList(
+    $('mon-decisions'),
+    ds.map((d) => `${clock(d.ts)}  ${d.label}${d.reason ? ' — ' + d.reason : ''}`),
+    'Belum ada keputusan.',
+  );
+}
+
 // ---- tab -------------------------------------------------------------------
 function selectTab(name) {
   for (const b of $('tabs').querySelectorAll('button')) {
@@ -230,6 +331,7 @@ function selectTab(name) {
   }
   for (const s of document.querySelectorAll('.tab')) s.hidden = s.id !== `tab-${name}`;
   if (name === 'log') renderLogs();
+  if (name === 'monitor') renderMonitor();
   if (name === 'impor') $('json-area').value = exportText();
   window.history.replaceState(null, '', `#${name}`);
 }
@@ -279,7 +381,11 @@ async function init() {
   );
   onStorageChange((changes) => {
     if (changes[KEYS.logs] && !$('tab-log').hidden) renderLogs();
+    if (changes['w62.status'] && !$('tab-monitor').hidden) renderMonitor();
   });
+  setInterval(() => {
+    if (!$('tab-monitor').hidden) renderMonitor();
+  }, 2000);
   const start = location.hash.slice(1);
   if (start && document.getElementById(`tab-${start}`)) selectTab(start);
   else selectTab('akun');

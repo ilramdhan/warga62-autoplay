@@ -7,11 +7,15 @@ import * as act from './dom/act.js';
 import { readGame, readMe, playersOf } from './state/reader.js';
 import { buildView } from './state/view.js';
 import { createPolicy } from './strategy/index.js';
+import { buildInsight } from './strategy/insight.js';
 import { handlers as allHandlers } from './handlers/index.js';
 import { createChat } from './social/chat.js';
 
 const STATUS_GAP_MS = 1000;
 const GAME_GAP_MS = 10000;
+const STUCK_RUNS = 25; // ~9 dtk pada tick 350 ms
+const BENCH_MS = 6000;
+const INSIGHT_GAP_MS = 1500;
 
 /** Nama pemain yang bukan akun milik user (tanpa beda huruf besar/kecil). */
 export function foreignPlayers(players, accounts) {
@@ -55,6 +59,12 @@ export function createEngine({ getConfig, emit, log, handlers = allHandlers }) {
   let hiddenLogged = false;
   let foreignLogged = null;
   let progressSig = null;
+  const idleRuns = new Map();
+  const decisions = [];
+  let insightMemory = {};
+  let insightAt = 0;
+  let lastInsight = null;
+  const benched = new Map();
   let lastActionAt = Date.now();
   let lastAction = null;
   let lastStatusAt = 0;
@@ -110,6 +120,9 @@ export function createEngine({ getConfig, emit, log, handlers = allHandlers }) {
       (game && Number.isFinite(prev.round) && Number.isFinite(game.round) && game.round < prev.round);
     if (newGame && prev.path !== null) {
       memo = {};
+      insightMemory = {};
+      lastInsight = null;
+      decisions.length = 0;
       chat.reset();
       gameOverEmitted = false;
     }
@@ -219,6 +232,7 @@ export function createEngine({ getConfig, emit, log, handlers = allHandlers }) {
       let detected = null;
       for (const h of list) {
         if (!scopes.has(h.scope)) continue;
+        if ((benched.get(h.id) ?? 0) > Date.now()) continue;
         try {
           const d = h.detect(ctx);
           if (d) {
@@ -231,7 +245,19 @@ export function createEngine({ getConfig, emit, log, handlers = allHandlers }) {
         }
       }
 
+      let insight = null;
+      if (view && now - insightAt >= INSIGHT_GAP_MS) {
+        insightAt = now;
+        try {
+          insight = buildInsight(view, cfg, insightMemory);
+          lastInsight = insight;
+        } catch (e) {
+          log.debug(`insight gagal: ${e?.message ?? e}`);
+        }
+      } else insight = view ? lastInsight : null;
       const base = {
+        insight,
+        decisions: decisions.slice(),
         round: game?.round ?? null,
         phase: game?.phase ?? null,
         myCash: me?.cash ?? null,
@@ -248,6 +274,22 @@ export function createEngine({ getConfig, emit, log, handlers = allHandlers }) {
           log.error(`Handler ${chosen.id} galat: ${e?.message ?? e}`);
           result = false;
         }
+        // Pengaman: handler yang terus terdeteksi tapi tidak bisa bertindak (run() false) jangan memblokir
+        // handler berprioritas lebih rendah selamanya (mis. modal "X bangkrut → Lanjut").
+        if (result !== false && ctx.policy?.lastReason && lastAction?.msg) {
+          decisions.push({ ts: Date.now(), fn: chosen.id, label: lastAction.msg, reason: ctx.policy.lastReason });
+          if (decisions.length > 15) decisions.shift();
+        }
+        if (ctx.policy) ctx.policy.lastReason = '';
+        if (result === false) {
+          const n = (idleRuns.get(chosen.id) ?? 0) + 1;
+          idleRuns.set(chosen.id, n);
+          if (n >= STUCK_RUNS) {
+            idleRuns.set(chosen.id, 0);
+            benched.set(chosen.id, Date.now() + BENCH_MS);
+            log.debug(`Handler ${chosen.id} tidak bisa bertindak ${n}x; dilewati sementara.`);
+          }
+        } else idleRuns.set(chosen.id, 0);
         if (result !== false) {
           lastActionAt = Date.now();
           lastAction = { handler: chosen.id, msg: lastAction?.msg ?? null, ts: lastActionAt };

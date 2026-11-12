@@ -45,12 +45,28 @@ function renderStatus(s) {
   $('s-phase').textContent = txt(f.phase);
   $('s-cash').textContent = formatRupiah(f.cash);
   renderPlayers(f);
+  renderMonitor(f.insight);
   if (f.at) {
     const sec = Math.max(0, Math.round((Date.now() - f.at) / 1000));
     $('s-age').textContent = `Update terakhir ${sec} detik lalu.`;
   } else {
     $('s-age').textContent = 'Belum ada data dari halaman game. Buka mainwarga62.id.';
   }
+}
+
+function renderMonitor(ins) {
+  $('monitor-panel').hidden = !ins;
+  if (!ins) return;
+  const stance = ins.me?.stance ? ` · ${ins.me.stance}` : '';
+  $('mon-line').textContent = `Ronde ${ins.round ?? '-'}${stance}`;
+  const top = [...(ins.opponents || [])].sort((a, b) => (b.threat || 0) - (a.threat || 0)).slice(0, 3);
+  $('mon-opps').replaceChildren(
+    ...top.map((o) => {
+      const li = document.createElement('li');
+      li.textContent = `${o.name} — ${formatRupiah(o.cash)} · ${formatRupiah(o.threat)}`;
+      return li;
+    }),
+  );
 }
 
 function renderPlayers(f) {
@@ -128,6 +144,11 @@ async function init() {
   $('open-options').addEventListener('click', (e) => {
     e.preventDefault();
     chrome.runtime.openOptionsPage();
+    window.close();
+  });
+  $('open-monitor').addEventListener('click', (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html#monitor') });
     window.close();
   });
   onStorageChange(async (changes) => {

@@ -102,6 +102,14 @@ Setiap akun main sendiri untuk menang, tanpa kerja sama.
   dibaca dari tabel `DIFFICULTY`.
 - `rollTarget` default **Perfect** (peluang kembar 2× untuk keluar Lapas, lemparan satu dadu ambil yang terbaik).
 
+## Monitor (`strategy/insight.js`)
+
+Dihitung tiap ~1,5 dtk dari View (hanya info yang terlihat pemain): kas, kekayaan bersih, utang, cadangan risiko,
+perkiraan biaya 2 giliran, sikap (agresif/seimbang/bertahan); per lawan: kota/bangunan/gadai, provinsi lengkap &
+hampir lengkap, ancaman sewa ke saya (2 giliran), gaya main (pembangun, kolektor tanah, terjepit utang, menimbun
+kas), tren kekayaan, dan perubahan sejak pembaruan sebelumnya. Ditampilkan di tab **Monitor** halaman Pengaturan
+dan ringkas di popup, bersama 15 keputusan terakhir beserta alasannya.
+
 ## Flag policy
 
 Dokumentasi tiap flag ada di `ACHIEVEMENT_FLAGS` (`src/core/strategy/index.js`). Ringkasnya: `rollTarget`,
