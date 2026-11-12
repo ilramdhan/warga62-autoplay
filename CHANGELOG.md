@@ -4,6 +4,16 @@ Semua perubahan penting pada proyek ini dicatat di berkas ini.
 
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/), dan proyek ini memakai [Semantic Versioning](https://semver.org/lang/id/).
 
+## [2.2.1](https://github.com/ilramdhan/warga62-autoplay/compare/v2.2.0...v2.2.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* **arena:** beli kota pertama provinsi, tetap bangun saat cadangan membengkak ([9346ef6](https://github.com/ilramdhan/warga62-autoplay/commit/9346ef68c5c613944a9f698f2814877ef6dfd59a))
+* host undang otomatis (scope modal Undang teman, bukan BODY) ([ef6c523](https://github.com/ilramdhan/warga62-autoplay/commit/ef6c523670bab78b3c61e78c10fd2f9e90bd1f2f))
+* host undang otomatis (scope modal Undang teman, bukan BODY) ([f09fb55](https://github.com/ilramdhan/warga62-autoplay/commit/f09fb556af9b38c0cf7449429cc87bb9bb92bbfd))
+* kirim uang tidak macet (re-fetch Tambah + verifikasi pilih via aria-pressed) ([51b0d78](https://github.com/ilramdhan/warga62-autoplay/commit/51b0d78f4d21bf5c70f01c8dbea864eaed7288f7))
+
 ## [2.2.0](https://github.com/ilramdhan/warga62-autoplay/compare/v2.1.5...v2.2.0) (2026-11-12)
 
 
