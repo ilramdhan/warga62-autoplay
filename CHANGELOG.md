@@ -4,6 +4,20 @@ Semua perubahan penting pada proyek ini dicatat di berkas ini.
 
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/), dan proyek ini memakai [Semantic Versioning](https://semver.org/lang/id/).
 
+## [2.2.0](https://github.com/ilramdhan/warga62-autoplay/compare/v2.1.5...v2.2.0) (2026-11-12)
+
+
+### Features
+
+* aktifkan bot di tengah game tanpa mengetik semua nick ([92c3f98](https://github.com/ilramdhan/warga62-autoplay/commit/92c3f98218a9e3a9229c7b89cac026f10179c61d))
+* **arena:** strategi pintar fokus bangun, likuiditas, dan pinjaman ([dffa399](https://github.com/ilramdhan/warga62-autoplay/commit/dffa399178fe9eddf5a347a9edd669b4219bbfa4))
+
+
+### Bug Fixes
+
+* Joki Dadu dipakai, modal kirim uang tidak macet, monitor strategi ([853816b](https://github.com/ilramdhan/warga62-autoplay/commit/853816b6019fb6066ca1b6416d2fef573724ed1d))
+* regresi undang, terima undangan, dan kirim uang ([be03812](https://github.com/ilramdhan/warga62-autoplay/commit/be03812b1ed1712eae3b1e07e7c4e96b6dd111b7))
+
 ## [2.1.5](https://github.com/ilramdhan/warga62-autoplay/compare/v2.1.4...v2.1.5) (2026-11-12)
 
 
