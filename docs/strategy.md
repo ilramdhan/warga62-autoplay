@@ -64,26 +64,45 @@ jual bangunan termurah → gadai kota termurah → pinjam → Pinjol → bangkru
 
 Setiap akun main sendiri untuk menang, tanpa kerja sama.
 
-- **Beli**: harga tanah tetap dihitung di kekayaan bersih, jadi biaya sebenarnya adalah likuiditas. Bot membeli
-  kalau sisa kas ≥ cadangan. Cadangan dilonggarkan untuk kota yang **melengkapi provinsi** (40% cadangan) atau
-  **menggagalkan provinsi lawan** yang sudah 2/3 (70%). Nilai kota = ekspektasi sewa dari lawan selama sisa game
-  (dikali eskalasi Krisis), plus bonus melengkapi/menggagalkan.
-- **Bangun**: skor = tambahan sewa × ekspektasi kunjungan lawan ÷ biaya, dikali bonus petak hotspot (2–12
-  langkah setelah START, Lapas, dan gerbang tol), provinsi lengkap ×1,5, dan naik ke Perumahan Elit ×1,25 (aman
-  dari ambil alih). Dibangun dari skor tertinggi selama anggaran (kas − cadangan) cukup.
-- **Ambil alih**: tolak kota yang aman (Elit, provinsi penuh, gadai, Negara). Ambil kalau manfaat (sewa ke depan,
-  bonus melengkapi/menggagalkan provinsi) ≥ premi (harga − nilai kota) dan cadangan tetap aman.
+- **Cadangan kas**: `recommendedReserve` (ekspektasi biaya 2 giliran + (1 − toleransi) × kasus terburuk), minimal
+  `(1,3 − toleransi) ×` sewa terbesar yang mungkin didarati, ditambah setengah eskalasi Krisis kalau Krisis aktif
+  (dan game tidak mengirim pengali sewa aktual), ditambah utang yang jatuh tempo ≤ 2 giliran. Semua dari tabel
+  tingkat (Santai/Normal/Inflasi/Krismon).
+- **Beli**: harga tanah tetap dihitung di kekayaan bersih, jadi biaya sebenarnya likuiditas + Pajak Tahunan (dihitung
+  per properti). Syarat sisa kas: **melengkapi provinsi** 40% cadangan, **menggagalkan provinsi lawan** 70%,
+  provinsi yang masih bisa kita lengkapi = cadangan + **dana bangun**, kota di provinsi yang sudah dimiliki lawan =
+  1,5× cadangan + dana bangun. Dana bangun = biaya satu putaran bangun di provinsi lengkap kita (atau setengah
+  biaya bangun kalau belum punya provinsi lengkap). Tanpa dana ini kas habis untuk tanah dan bot tidak pernah bisa
+  membangun, padahal tambahan sewa per rupiah bangunan ~4× tanah.
+- **Bangun**: kota di provinsi lengkap selalu didahulukan dan boleh memakai kas sampai 75% cadangan (bangunan bisa
+  dijual lagi saat Gali Lubang); kota lain sampai 100% cadangan. Di dalam kelompok, urut skor = tambahan sewa ×
+  ekspektasi kunjungan lawan ÷ biaya, dikali bonus hotspot (2–12 langkah setelah START, Lapas, gerbang tol) dan
+  Perumahan Elit ×1,25 (aman dari ambil alih). Kota tergadai tidak dibangun.
+- **Ambil alih**: premi (harga − nilai kota) hilang permanen, jadi hanya dipertimbangkan kalau kota itu
+  **melengkapi provinsi kita** atau **menggagalkan provinsi lawan** yang 2/3. Syarat: sisa kas ≥ 1,2× cadangan
+  (+ biaya satu bangunan kalau melengkapi), dan manfaat (sewa kota + sewa provinsi berbangunan selama ≤ 20 giliran,
+  bonus menggagalkan) ≥ premi × (1,3 + 0,6 × (1 − toleransi)). Kota aman (Elit, provinsi penuh, gadai, Negara)
+  ditolak; di mode Ronde ≤ 3 ronde terakhir tidak ambil alih.
 - **Tol**: tiap gerbang dinilai dari ekspektasi biaya 2 giliran berikut, peluang gajian, dan peluang mendarat di
   kota kosong. Gerbang yang melompati START dikurangi satu gaji (lewat tol tidak gajian).
 - **Kartu pilihan**: tiap opsi diberi biaya: nominal bayar, "lewati N giliran" (tempo hilang dikurangi sewa yang
   terhindar), atau "kota termurah disita" (nilai kota termurah; 0 kalau tak punya kota).
 - **Gali Lubang**: dari semua opsi jual/gadai pilih kerugian per rupiah terkecil. Jual bangunan rugi
-  (biaya − refund) + sewa yang hilang; gadai rugi selisih tebus + sewa yang hilang, ×1,5 kalau bagian provinsi
-  lengkap. Setelah aset habis: pinjam pemain (bunga biasanya lebih murah) → Pinjol → bangkrut.
-- **Meminjamkan**: hanya kalau sisa kas ≥ 1,2× cadangan, game belum hampir selesai, dan peminjam bukan pemimpin
-  (mode survival). Rasio risiko = (jumlah × 1,5) ÷ (kekayaan bersih peminjam + sebagian gaji). Rasio > 1 → tidak
-  menawarkan; > 0,6 → 50%; > 0,3 → 25%; selain itu 10%. `strategy.lendInterest` angka tetap menimpa hasil ini.
-- **Terima pinjaman**: bunga terendah; kalau Pinjol tersedia dan bunganya lebih murah, kembalikan `null`.
+  (biaya − refund) + sewa yang hilang (8 giliran); gadai rugi selisih tebus + sewa yang hilang, ×1,5 kalau bagian
+  provinsi lengkap. Kalau Pinjol tersedia bersamaan dan plafonnya cukup, Pinjol dipilih bila bunganya lebih kecil
+  dari kerugian per rupiah opsi terbaik (mis. jual rumah di provinsi lengkap); pinjaman pemain dipilih bila opsi
+  terbaik rugi > 25% per rupiah. Setelah aset habis: pinjam pemain → Pinjol → pinjam lagi / Pinjol walau kurang →
+  bangkrut **hanya** kalau tidak ada pinjaman maupun Pinjol (Krismon tidak punya Pinjol).
+- **Lunasi utang** (`preRoll` → `{type:'repay'}`, tombol `Bayar utang`): kalau kas − utang ≥ cadangan dan utangnya
+  mahal (Pinjol atau bunga ≥ 25%) atau jatuh tempo ≤ 1 giliran. Kalau rincian pinjaman tidak diketahui, hanya
+  kalau kas − utang ≥ 1,5× cadangan.
+- **Tebus gadai**: kota di provinsi lengkap kalau kas sisa ≥ 1,5× cadangan; kota lain baru kalau ≥ 2,5× cadangan
+  (tebus lebih mahal dari hasil gadai). Tidak menebus di ronde terakhir.
+- **Meminjamkan**: hanya kalau sisa kas ≥ 1,2× cadangan, game belum hampir selesai, dan peminjam tidak lebih kaya
+  dari kita (semua mode). Rasio risiko = (jumlah × 1,5) ÷ (kekayaan bersih peminjam + sebagian gaji). Rasio > 1 →
+  tidak menawarkan; > 0,6 → 50%; > 0,3 → 25%; selain itu 10%. `strategy.lendInterest` angka tetap menimpa hasil ini.
+- **Terima pinjaman**: bunga terendah. Tawaran ditolak demi Pinjol hanya kalau Pinjol lebih murah, tombol Pinjol di
+  layar Gali Lubang memang aktif (`canPinjol !== false`), dan plafon Pinjol ≥ kekurangan (`owe`).
 - **Permintaan uang**: default tolak; hanya terima ≤ Rp100 rb, peminjam bukan pemimpin, kas tetap ≥ 2× cadangan.
 - **Tukar tanah**: terima kalau (nilai masuk − nilai keluar + bonus provinsi lengkap kita − bonus lawan) > 0, kas
   tetap aman, dan lawan tidak mendapat provinsi lengkap lebih banyak dari kita.
@@ -126,7 +145,10 @@ Dokumentasi tiap flag ada di `ACHIEVEMENT_FLAGS` (`src/core/strategy/index.js`).
   atau objek `{ kind, amount, verdict, tile, dice }`. `cardId` memakai id di `KEEP_CARDS` (`orang-dalam`, dst.).
 - `acceptLoan` mengembalikan `lender` persis seperti yang diberikan di `offers` (id atau nama).
 - Bentuk `game.loans[]` belum pasti; View membaca `borrower|borrowerId`, `lender|lenderId`,
-  `amount|principal`, `interestPercent|interest`, `remaining|owed|total`.
+  `amount|principal`, `interestPercent|interest`, `remaining|owed|total`, `turnsLeft|dueIn|remainingTurns`
+  (sisa giliran sampai jatuh tempo, opsional).
+- Data papan (`data/board.js`) sama untuk semua peta (pulau, kota-banjir, ibu-kota-baru, desa-sawah); peta hanya
+  tampilan. Kalau suatu peta ternyata mengubah harga/sewa, data papan perlu dibuat per peta.
 - Bentuk tawaran tukar tanah belum pasti; `normalizeTrade` membaca `offerTiles/offerCash` (yang diberikan
   pengusul) dan `requestTiles/requestCash` (yang diminta), plus beberapa alias.
 - Pengali sewa Krisis dibaca dari `game.rules.rentMultiplier` (atau `game.rentMultiplier`) bila ada; kalau tidak,

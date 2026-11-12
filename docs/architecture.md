@@ -154,7 +154,7 @@ Daftar handler (prioritas) dan label UI yang sudah diverifikasi ada di `docs/ui-
 ```js
 createPolicy(cfg) -> {
   rollTarget(view): 'perfect' | 'cupu' | 'biasa',
-  preRoll(view): Array<{type:'send', to:string, amount:number} | {type:'redeem', tile:number} | {type:'mortgage', tile:number} | {type:'payBail'}>,
+  preRoll(view): Array<{type:'send', to:string, amount:number} | {type:'redeem', tile:number} | {type:'mortgage', tile:number} | {type:'payBail'} | {type:'repay'}>,
   shouldBuy(view, {tile, price}): boolean,
   shouldTakeover(view, {tile, price, ownerId}): boolean,
   chooseUpgrades(view, candidates: number[]): number[],          // subset tile yang dibangun
@@ -167,7 +167,7 @@ createPolicy(cfg) -> {
   debtStep(view, {owe, canSell:number[], canMortgage:number[], canLoan:boolean, canPinjol:boolean}):
       {type:'sell', tile} | {type:'mortgage', tile} | {type:'requestLoan'} | {type:'pinjol'} | {type:'bankrupt'},
   lendOffer(view, {borrowerId, amount}): number | null,             // persen bunga (0/10/25/50) atau null = tidak menawarkan
-  acceptLoan(view, {offers: Array<{lender, interestPercent}>}): string | null,
+  acceptLoan(view, {offers: Array<{lender, interestPercent}>, canPinjol?: boolean, owe?: number}): string | null,
   respondMoneyRequest(view, {fromId, amount}): boolean,
   respondTrade(view, trade): boolean,
 }

@@ -228,3 +228,191 @@ test('createPolicy tidak pernah melempar (view null)', () => {
     }
   }
 });
+
+// ---------- arena: perilaku baru (likuiditas, provinsi, bangun, ambil alih, utang) ----------
+
+const DIFFS = ['santai', 'normal', 'inflasi', 'krismon'];
+function arena3(diff, myCash, props = {}, over = {}) {
+  return {
+    round: 6,
+    settings: { difficulty: diff, mode: 'survival' },
+    players: {
+      me: { id: 'me', name: 'A', cash: myCash, position: 20 },
+      b: { id: 'b', name: 'B', cash: 3_000_000, position: 5 },
+      h: { id: 'h', name: 'H', cash: 5_000_000, position: 30 },
+    },
+    properties: props,
+    ...over,
+  };
+}
+
+test('smart: ambil alih hanya untuk melengkapi/menggagalkan provinsi (semua tingkat)', () => {
+  const p = createPolicy(ARENA);
+  for (const diff of DIFFS) {
+    // kota "nyasar": tidak melengkapi apa pun -> tolak walau kas melimpah
+    const stray = buildView(arena3(diff, 30_000_000, { 25: { owner: 'b' }, 26: { owner: 'h' } }), 'me', ARENA);
+    assert.equal(p.shouldTakeover(stray, { tile: 26, price: stray.takeoverPrice(26) }), false, diff);
+    assert.match(p.lastReason, /tidak melengkapi/);
+    // melengkapi provinsi tapi kas mepet -> tolak (cadangan + dana bangun)
+    const props = { 25: { owner: 'me' }, 27: { owner: 'me' }, 26: { owner: 'h' } };
+    const tight = buildView(arena3(diff, 2_500_000, props), 'me', ARENA);
+    assert.equal(p.shouldTakeover(tight, { tile: 26, price: tight.takeoverPrice(26) }), false, diff);
+  }
+  // Krismon (pengali 1,5×) + kas longgar: melengkapi provinsi layak diambil alih
+  const props = { 25: { owner: 'me' }, 27: { owner: 'me' }, 26: { owner: 'h' } };
+  const rich = buildView(arena3('krismon', 10_000_000, props), 'me', ARENA);
+  assert.equal(p.shouldTakeover(rich, { tile: 26, price: rich.takeoverPrice(26) }), true);
+  // Mode Ronde, ronde hampir habis: premi tidak sempat kembali
+  const ronde = arena3('krismon', 10_000_000, props, {
+    round: 9,
+    settings: { difficulty: 'krismon', mode: 'ronde', maxRounds: 10 },
+  });
+  assert.equal(p.shouldTakeover(buildView(ronde, 'me', ARENA), { tile: 26, price: 1_650_000 }), false);
+});
+
+test('smart: beli tanah menyisakan dana bangun; melengkapi provinsi tetap dibeli', () => {
+  const p = createPolicy(ARENA);
+  for (const diff of DIFFS) {
+    // punya Aceh lengkap tanpa bangunan, kas 2,4 jt: kota acak ditolak supaya bisa bangun
+    const props = { 1: { owner: 'me' }, 2: { owner: 'me' }, 3: { owner: 'me' } };
+    const v = buildView(arena3(diff, 2_400_000, props), 'me', ARENA);
+    assert.equal(p.shouldBuy(v, { tile: 45, price: 1_800_000 }), false, diff);
+    // kota ketiga provinsi sendiri: dibeli walau kas tipis (cadangan 40%)
+    const v2 = buildView(arena3(diff, 3_000_000, { 9: { owner: 'me' }, 10: { owner: 'me' } }), 'me', ARENA);
+    assert.equal(p.shouldBuy(v2, { tile: 11, price: 700_000 }), true, diff);
+    assert.match(p.lastReason, /melengkapi/);
+  }
+  // awal game, kas penuh: beli untuk membuka provinsi
+  const start = buildView(arena3('normal', 10_000_000, {}, { round: 1 }), 'me', ARENA);
+  assert.equal(p.shouldBuy(start, { tile: 25, price: 1_100_000 }), true);
+});
+
+test('smart: bangun provinsi lengkap lebih dulu dan dengan cadangan lebih longgar', () => {
+  const p = createPolicy(ARENA);
+  for (const diff of DIFFS) {
+    const props = {
+      1: { owner: 'me' },
+      2: { owner: 'me' },
+      3: { owner: 'me' },
+      25: { owner: 'me' },
+      26: { owner: 'b' },
+    };
+    const v = buildView(
+      arena3(diff, 4_000_000, props, { players: { me: { id: 'me', cash: 4e6, position: 0 } } }),
+      'me',
+      ARENA,
+    );
+    const picked = p.chooseUpgrades(v, [1, 2, 3, 25]);
+    assert.ok(picked.length >= 1, `${diff}: ${p.lastReason}`);
+    assert.ok([1, 2, 3].includes(picked[0]), `${diff}: provinsi lengkap dulu`);
+    // kota tergadai tidak dibangun
+    const m = buildView(arena3(diff, 20e6, { 1: { owner: 'me', mortgaged: true } }), 'me', ARENA);
+    assert.deepEqual(p.chooseUpgrades(m, [1]), []);
+  }
+});
+
+test('smart: ronde terakhir tidak bangun & tidak tebus (semua tingkat, Ronde 10/15/20)', () => {
+  const p = createPolicy(ARENA);
+  for (const diff of DIFFS) {
+    for (const rounds of [10, 15, 20]) {
+      const g = arena3(
+        diff,
+        30_000_000,
+        { 1: { owner: 'me' }, 2: { owner: 'me' }, 3: { owner: 'me' }, 9: { owner: 'me', mortgaged: true } },
+        {
+          round: rounds,
+          settings: { difficulty: diff, mode: 'ronde', maxRounds: rounds },
+        },
+      );
+      const v = buildView(g, 'me', ARENA);
+      assert.deepEqual(p.chooseUpgrades(v, [1, 2, 3]), [], `${diff}/${rounds}`);
+      assert.ok(!p.preRoll(v).some((a) => a.type === 'redeem'), `${diff}/${rounds}`);
+    }
+  }
+});
+
+test('smart: gali lubang — Pinjol lebih murah daripada menjual bangunan provinsi lengkap', () => {
+  const p = createPolicy(ARENA);
+  const props = { 1: { owner: 'me', level: 2 }, 2: { owner: 'me', level: 2 }, 3: { owner: 'me', level: 2 } };
+  for (const diff of ['santai', 'normal', 'inflasi']) {
+    const v = buildView(arena3(diff, -600_000, props), 'me', ARENA);
+    assert.deepEqual(p.debtStep(v, { owe: 600_000, canSell: [1, 2, 3], canMortgage: [], canPinjol: true }), {
+      type: 'pinjol',
+    });
+    // Pinjol tidak cukup menutup utang -> tetap jual
+    assert.equal(p.debtStep(v, { owe: 9_000_000, canSell: [1, 2, 3], canPinjol: true }).type, 'sell');
+  }
+  // Krismon: tidak ada Pinjol; tanpa pinjaman tersisa -> jual, bukan bangkrut
+  const k = buildView(arena3('krismon', -600_000, props), 'me', ARENA);
+  assert.equal(p.debtStep(k, { owe: 600_000, canSell: [1, 2, 3], canPinjol: false }).type, 'sell');
+  // aset habis: tidak pernah bangkrut selama pinjaman/Pinjol masih ada
+  const empty = buildView(arena3('normal', -600_000, {}), 'me', ARENA);
+  assert.deepEqual(p.debtStep(empty, { owe: 600_000, canSell: [], canMortgage: [], canLoan: false, canPinjol: true }), {
+    type: 'pinjol',
+  });
+  assert.deepEqual(
+    p.debtStep(empty, { owe: 600_000, canSell: [], canMortgage: [], canLoan: true, triedLoan: true, canPinjol: true }),
+    { type: 'pinjol' },
+  );
+});
+
+test('smart: acceptLoan menolak demi Pinjol hanya kalau Pinjol benar-benar bisa', () => {
+  const p = createPolicy(ARENA);
+  const v = buildView(arena3('normal', -600_000, {}), 'me', ARENA);
+  const offers = [
+    { lender: 'h', interestPercent: 50 },
+    { lender: 'b', interestPercent: 25 },
+  ];
+  assert.equal(p.acceptLoan(v, { offers, canPinjol: true, owe: 600_000 }), 'b');
+  const pricey = [{ lender: 'h', interestPercent: 50 }];
+  // bunga 50% = Pinjol Normal 50%: tidak lebih murah -> terima
+  assert.equal(p.acceptLoan(v, { offers: pricey, canPinjol: true, owe: 600_000 }), 'h');
+  const inflasi = buildView(arena3('santai', -600_000, {}), 'me', ARENA); // Pinjol 30%
+  assert.equal(p.acceptLoan(inflasi, { offers: pricey, canPinjol: true, owe: 600_000 }), null);
+  assert.equal(
+    p.acceptLoan(inflasi, { offers: pricey, canPinjol: false, owe: 600_000 }),
+    'h',
+    'tombol Pinjol nonaktif',
+  );
+  assert.equal(p.acceptLoan(inflasi, { offers: pricey, owe: 5_000_000 }), 'h', 'plafon Pinjol kurang');
+  const krismon = buildView(arena3('krismon', -600_000, {}), 'me', ARENA);
+  assert.equal(p.acceptLoan(krismon, { offers: pricey }), 'h', 'Krismon tanpa Pinjol');
+});
+
+test('smart: lunasi utang mahal lebih awal kalau kas aman', () => {
+  const p = createPolicy(ARENA);
+  const loans = [{ borrower: 'me', lender: 'h', amount: 1_000_000, interestPercent: 50, turnsLeft: 2 }];
+  const rich = buildView(arena3('normal', 10_000_000, {}, { loans }), 'me', ARENA);
+  assert.ok(p.preRoll(rich).some((a) => a.type === 'repay'));
+  const poor = buildView(arena3('normal', 1_600_000, {}, { loans }), 'me', ARENA);
+  assert.ok(!p.preRoll(poor).some((a) => a.type === 'repay'), 'kas tidak aman');
+  const cheap = [{ borrower: 'me', lender: 'h', amount: 1_000_000, interestPercent: 0, turnsLeft: 3 }];
+  const v0 = buildView(arena3('normal', 10_000_000, {}, { loans: cheap }), 'me', ARENA);
+  assert.ok(!p.preRoll(v0).some((a) => a.type === 'repay'), 'bunga 0% & belum jatuh tempo');
+});
+
+test('smart: cadangan naik saat Krisis & sesuai tingkat', () => {
+  const p = createPolicy(ARENA);
+  const props = { 33: { owner: 'h', level: 2 }, 34: { owner: 'h', level: 2 }, 35: { owner: 'h', level: 2 } };
+  const reserveOf = (diff, crisis) => {
+    const v = buildView(arena3(diff, 2_500_000, props, { crisisActive: crisis }), 'me', ARENA);
+    p.shouldBuy(v, { tile: 45, price: 1_800_000 });
+    return Number(/cadangan (\d+)/.exec(p.lastReason)?.[1] ?? 0);
+  };
+  for (const diff of DIFFS) assert.ok(reserveOf(diff, true) > reserveOf(diff, false), diff);
+  assert.ok(reserveOf('krismon', false) > reserveOf('santai', false));
+});
+
+test('smart: tidak meminjamkan ke pemain yang lebih kaya (mode Ronde juga)', () => {
+  const p = createPolicy(ARENA);
+  const g = arena3(
+    'normal',
+    8_000_000,
+    { 45: { owner: 'h', level: 3 }, 46: { owner: 'h', level: 3 } },
+    {
+      settings: { difficulty: 'normal', mode: 'ronde', maxRounds: 20 },
+    },
+  );
+  g.players.h.cash = 9_000_000;
+  assert.equal(p.lendOffer(buildView(g, 'me', ARENA), { borrowerId: 'h', amount: 300_000 }), null);
+});

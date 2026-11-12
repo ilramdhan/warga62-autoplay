@@ -84,6 +84,8 @@ function normalizeLoans(game) {
         principal,
         interest,
         owed,
+        /** Sisa giliran sampai jatuh tempo (undefined kalau tidak diketahui). */
+        turnsLeft: optNum(l.turnsLeft) ?? optNum(l.dueIn) ?? optNum(l.remainingTurns),
         kind: l.kind ?? (l.lender === 'pinjol' ? 'pinjol' : 'player'),
       };
     });

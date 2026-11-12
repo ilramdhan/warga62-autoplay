@@ -3,7 +3,7 @@
  * Semua fungsi murni & sinkron. Setiap keputusan mengisi `policy.lastReason` (dan memanggil cfg.explain bila ada).
  * Penjelasan heuristik: docs/strategy.md.
  */
-import { BOARD_SIZE, LOAN_INTEREST_OPTIONS, PROVINCES, TILES, provinceOf } from '../data/board.js';
+import { BOARD_SIZE, LOAN_INTEREST_OPTIONS, PROVINCES, TILES, TILE_RULES, provinceOf } from '../data/board.js';
 import {
   expectedRentExposure,
   expectedRentIncome,
@@ -26,6 +26,8 @@ const norm = (s) =>
 
 /** Rata-rata giliran untuk satu putaran papan (48 petak / ~7 langkah). */
 const TURNS_PER_LAP = BOARD_SIZE / 7;
+/** Rata-rata kunjungan ke Pajak Tahunan per giliran (1 petak dari 48, ≈ 0,02). */
+const TAX_VISITS_PER_TURN = TILES.filter((t) => t.kind === 'tax').length / BOARD_SIZE;
 
 /** Status kepemilikan provinsi dari sudut pandang pemain `pid`. */
 export function provinceStatus(view, tile, pid) {
@@ -95,10 +97,61 @@ export function createSmartPolicy(cfg = {}) {
   const crisisFactor = (view) =>
     view.crisis ? 1 + (view.difficulty.crisisRentEscalation * Math.min(horizon(view), 20)) / TURNS_PER_LAP / 2 : 1;
 
+  /** Horizon penilaian (giliran), dibatasi 20 supaya nilai jangka panjang tidak dilebih-lebihkan. */
+  const valueHorizon = (view) => Math.min(20, horizon(view));
+
+  /** Utang yang jatuh tempo dalam ≤ 2 giliran (atau tempo tak diketahui) ikut dicadangkan. */
+  const dueSoonDebt = (view) =>
+    (view.loans ?? [])
+      .filter((l) => l.borrower === view.meId && (l.turnsLeft === undefined || l.turnsLeft <= 2))
+      .reduce((sum, l) => sum + num(l.owed), 0);
+
   const reserveFor = (view) => {
     if (typeof flags.reserveOverride === 'number') return flags.reserveOverride;
-    const base = recommendedReserve(view, view.meId, { turns: reserveTurns, riskTolerance: rt });
+    let base = recommendedReserve(view, view.meId, { turns: reserveTurns, riskTolerance: rt });
+    // Satu kali kena sewa terbesar yang mungkin (kota lawan berbangunan) jangan sampai memaksa gadai beruntun.
+    const worst = expectedRentExposure(view, view.meId, reserveTurns).worst;
+    base = Math.max(base, worst * (1.3 - rt));
+    // Krisis menaikkan sewa tiap putaran. Kalau game tidak mengirim pengali aktual, tambah setengah eskalasi.
+    if (view.crisis && typeof view.rules.rentMultiplier !== 'number') {
+      base *= 1 + num(view.difficulty.crisisRentEscalation) / 2;
+    }
+    base += dueSoonDebt(view);
+    base = Math.round(base);
     return flags.neverNegative ? Math.round(base * 1.5 + 300_000) : base;
+  };
+
+  /** Tambahan Pajak Tahunan per kota selama horizon (pajak dihitung per properti). */
+  const taxDrag = (view) => {
+    const per = view.crisis ? TILE_RULES.tax.crisisPerProperty : TILE_RULES.tax.perProperty;
+    return per * view.feeMultiplier * TAX_VISITS_PER_TURN * valueHorizon(view);
+  };
+
+  /** Petak milik saya yang paling layak dibangun berikutnya (null kalau tidak ada). */
+  const bestUpgrade = (view) => {
+    let best = null;
+    for (const t of view.myTiles) {
+      const prop = view.properties[t];
+      if (!provinceOf(t) || prop.mortgaged || prop.level >= 3) continue;
+      const score = upgradeScore(view, t);
+      if (!best || score > best.score) best = { t, score };
+    }
+    return best;
+  };
+
+  /**
+   * Dana bangun yang ditahan saat membeli tanah biasa: bangunan memberi tambahan sewa per rupiah ~4× tanah,
+   * tapi kesempatan bangun hanya datang saat gajian. Tanpa dana ini kas habis untuk tanah dan bot tak pernah bangun.
+   */
+  const buildFund = (view) => {
+    const best = bestUpgrade(view);
+    if (!best) return 0;
+    const prov = provinceOf(best.t);
+    const cost = PROVINCES[prov].upgradeCost;
+    if (!view.ownsProvince(view.meId, prov)) return cost * 0.5;
+    // Provinsi lengkap: cukup untuk satu putaran bangun di semua kotanya yang belum Elit.
+    const open = PROVINCES[prov].tiles.filter((t) => view.properties[t].level < 3).length;
+    return cost * Math.max(1, open);
   };
 
   /** Skor peningkatan satu tingkat untuk petak t (semakin besar semakin baik). */
@@ -122,8 +175,8 @@ export function createSmartPolicy(cfg = {}) {
     const pid = view.meId;
     const st = provinceStatus(view, t, pid);
     if (!st) return 0;
-    const ev = propertyEV(view, t, { ownerId: pid, price, horizon: horizon(view), level: 0 });
-    let value = ev.income * crisisFactor(view);
+    const ev = propertyEV(view, t, { ownerId: pid, price, horizon: valueHorizon(view), level: 0 });
+    let value = ev.income * crisisFactor(view) - taxDrag(view);
     const othersHere = Object.keys(st.others).length > 0;
     const completes = !othersHere && st.mine === st.size - 1;
     if (completes) value += ev.income + 0.5 * PROVINCES[st.prov].price;
@@ -173,6 +226,20 @@ export function createSmartPolicy(cfg = {}) {
         }
       }
     }
+    // Lunasi utang lebih awal kalau kas tetap aman dan utangnya mahal / hampir jatuh tempo.
+    const debt = num(view.debtOf(p.id));
+    const freeReserve = Math.max(0, reserve - dueSoonDebt(view)); // utang ini sendiri sudah termasuk cadangan
+    if (debt > 0 && cash - debt >= freeReserve) {
+      const mine = (view.loans ?? []).filter((l) => l.borrower === p.id);
+      const costly = mine.some((l) => l.kind === 'pinjol' || l.lender === 'pinjol' || l.interest >= 0.25);
+      const dueSoon = mine.some((l) => l.turnsLeft !== undefined && l.turnsLeft <= 1);
+      const unknown = !mine.length; // hanya tahu total utang: lunasi kalau kas sangat longgar
+      if (costly || dueSoon || (unknown && cash - debt >= freeReserve * 1.5)) {
+        actions.push({ type: 'repay' });
+        cash -= debt;
+        why(`lunasi utang ${debt}: ${dueSoon ? 'hampir jatuh tempo' : 'bunga tinggi'}`, null);
+      }
+    }
     if (!finalRound(view)) {
       const mortgaged = view.myTiles.filter((t) => view.properties[t].mortgaged);
       const ratio = num(view.rules.redeem, view.difficulty.redeem);
@@ -184,7 +251,10 @@ export function createSmartPolicy(cfg = {}) {
         }))
         .sort((a, b) => b.prio - a.prio)
         .forEach(({ t, cost }) => {
-          if (cash - cost >= reserve * 1.5) {
+          // Tebus = bayar lebih mahal dari hasil gadai; hanya sepadan untuk provinsi lengkap (sewa 2× & bisa
+          // dibangun) atau kalau kas benar-benar berlebih.
+          const full = view.ownsProvince(p.id, provinceOf(t));
+          if (cash - cost >= reserve * (full ? 1.5 : 2.5)) {
             actions.push({ type: 'redeem', tile: t });
             cash -= cost;
           }
@@ -211,17 +281,28 @@ export function createSmartPolicy(cfg = {}) {
     const othersHere = Object.keys(st.others).length > 0;
     const completes = !othersHere && st.mine === st.size - 1;
     const denial = st.maxOther === st.size - 1;
-    const needed = completes ? reserve * 0.4 : denial ? reserve * 0.7 : reserve;
+    // Provinsi masih bisa kita lengkapi tanpa ambil alih?
+    const open = !othersHere;
+    const fund = buildFund(view);
+    let needed;
+    if (completes) needed = reserve * 0.4;
+    else if (denial) needed = reserve * 0.7;
+    else if (open) needed = reserve + fund;
+    else needed = reserve * 1.5 + fund; // kota "nyasar" di provinsi milik bersama: hanya kalau kas longgar
     if (after < needed) {
-      return why(`lewati: sisa kas ${after} < cadangan ${Math.round(needed)}`, false);
+      return why(`lewati: sisa kas ${after} < cadangan ${Math.round(needed)}${fund ? ' (+dana bangun)' : ''}`, false);
     }
+    if (completes || denial) {
+      return why(`beli: ${completes ? 'melengkapi provinsi' : 'menggagalkan provinsi lawan'}`, true);
+    }
+    // Harga tanah tetap dihitung di kekayaan bersih, jadi biaya riil = likuiditas + pajak per properti.
     const value = ownershipValue(view, tile, cost);
-    // Harga tanah tetap dihitung di kekayaan bersih, jadi biaya riil = likuiditas. Ambang rendah.
-    const ok = completes || denial || value >= cost * 0.05;
+    // Provinsi terbuka: nilai utamanya peluang monopoli (sewa 2× + bangun), cukup asal likuid.
+    const ok = open ? value >= -0.25 * cost : value >= cost * 0.1;
     return why(
       ok
-        ? `beli: ${completes ? 'melengkapi provinsi' : denial ? 'menggagalkan provinsi lawan' : 'nilai sewa positif'}`
-        : 'lewati: nilai sewa terlalu kecil',
+        ? `beli: ${open ? 'membuka/menambah provinsi' : 'nilai sewa positif'}`
+        : 'lewati: sewa tidak menutup pajak & likuiditas',
       ok,
     );
   };
@@ -235,18 +316,34 @@ export function createSmartPolicy(cfg = {}) {
     const after = p.cash - cost;
     const reserve = reserveFor(view);
     if (flags.wantTakeover) return why('flag wantTakeover', after >= reserve * 0.5);
-    if (after < reserve) return why('ambil alih menguras cadangan', false);
     const owner = view.idOf(ownerId ?? view.properties[tile].owner);
     const st = provinceStatus(view, tile, p.id);
+    const prov = st.prov;
     const value = view.tileValue(tile);
     const premium = cost - value;
-    const income = expectedRentIncome(view, tile, { ownerId: p.id, horizon: horizon(view) }) * crisisFactor(view);
     const completes = st.mine === st.size - 1;
     const denial = (st.others[owner] ?? 0) === st.size - 1;
+    // Premi ambil alih (harga − nilai kota) hilang permanen dari kekayaan. Hanya untuk langkah strategis.
+    if (!completes && !denial) return why('ambil alih tidak: tidak melengkapi/menggagalkan provinsi', false);
+    // Mode Ronde: premi langsung mengurangi kekayaan bersih akhir, sewa tambahannya tak sempat kembali.
+    if (view.gameMode === 'ronde' && view.roundsLeft <= 3) return why('ambil alih tidak: ronde hampir habis', false);
+    // Setelah melengkapi provinsi, harus masih ada kas untuk membangun (di situlah sewa melonjak).
+    const needed = reserve * 1.2 + (completes ? PROVINCES[prov].upgradeCost : 0);
+    if (after < needed) return why(`ambil alih menguras cadangan (sisa ${after} < ${Math.round(needed)})`, false);
+    const h = valueHorizon(view);
+    const income = expectedRentIncome(view, tile, { ownerId: p.id, horizon: h }) * crisisFactor(view);
     let gain = income;
-    if (completes) gain += income + 0.5 * value;
+    if (completes) {
+      // Provinsi lengkap: sewa 2× lalu bisa dibangun (kas untuk satu bangunan sudah dipastikan di atas).
+      // Nilai provinsi dihitung dengan sewa KPR Subsidi (level 1) sebagai target realistis jangka pendek.
+      const provIncome = st.tiles.reduce(
+        (sum, t) => sum + expectedRentIncome(view, t, { ownerId: p.id, horizon: h, level: 1 }) * 0.8,
+        0,
+      );
+      gain += provIncome * crisisFactor(view) + 0.25 * value;
+    }
     if (denial) gain += 0.5 * value;
-    const ok = gain >= premium * (1 + (1 - rt) * 0.5);
+    const ok = gain >= premium * (1.3 + (1 - rt) * 0.6);
     return why(`ambil alih ${ok ? 'ya' : 'tidak'}: manfaat ${Math.round(gain)} vs premi ${Math.round(premium)}`, ok);
   };
 
@@ -255,16 +352,31 @@ export function createSmartPolicy(cfg = {}) {
     if (!p || !Array.isArray(candidates) || !candidates.length) return why('tidak ada kandidat', []);
     if (finalRound(view) && !flags.wantElit && !flags.maxBuild) return why('ronde terakhir: simpan kas', []);
     const reserve = reserveFor(view);
-    let budget = p.cash - (flags.maxBuild ? reserve * 0.25 : reserve);
+    // Bangunan di provinsi lengkap = sumber sewa utama & bisa dijual lagi (refund) saat Gali Lubang,
+    // jadi cadangannya sedikit lebih longgar dari pembelian tanah.
+    const keepFull = flags.maxBuild ? reserve * 0.25 : reserve * 0.75;
+    const keepOther = flags.maxBuild ? reserve * 0.25 : reserve;
+    let cash = p.cash;
     const ranked = candidates
-      .filter((t) => provinceOf(t) && view.properties[t]?.owner === p.id && view.properties[t].level < 3)
-      .map((t) => ({ t, score: upgradeScore(view, t), cost: PROVINCES[provinceOf(t)].upgradeCost }))
-      .sort((a, b) => b.score - a.score || a.t - b.t);
+      .filter(
+        (t) =>
+          provinceOf(t) &&
+          view.properties[t]?.owner === p.id &&
+          !view.properties[t].mortgaged &&
+          view.properties[t].level < 3,
+      )
+      .map((t) => ({
+        t,
+        full: view.ownsProvince(p.id, provinceOf(t)),
+        score: upgradeScore(view, t),
+        cost: PROVINCES[provinceOf(t)].upgradeCost,
+      }))
+      .sort((a, b) => Number(b.full) - Number(a.full) || b.score - a.score || a.t - b.t);
     const picked = [];
-    for (const { t, cost } of ranked) {
-      if (budget >= cost) {
+    for (const { t, cost, full } of ranked) {
+      if (cash - cost >= (full ? keepFull : keepOther)) {
         picked.push(t);
-        budget -= cost;
+        cash -= cost;
       }
     }
     return why(picked.length ? `bangun ${picked.join(',')}` : 'tidak bangun: menjaga cadangan', picked);
@@ -462,7 +574,7 @@ export function createSmartPolicy(cfg = {}) {
     }
   };
 
-  policy.debtStep = (view, { owe, canSell = [], canMortgage = [], canLoan, canPinjol, triedLoan } = {}) => {
+  policy.debtStep = (view, { owe, canSell = [], canMortgage = [], canLoan, canPinjol, triedLoan, pinjolSeen } = {}) => {
     const p = me(view);
     if (!p) return why('view kosong', { type: 'bankrupt' });
     if (flags.wantPinjol && canPinjol) return why('flag wantPinjol', { type: 'pinjol' });
@@ -471,7 +583,7 @@ export function createSmartPolicy(cfg = {}) {
     const refund = num(view.rules.buildingRefund, view.difficulty.buildingRefund);
     const mRatio = num(view.rules.mortgage, view.difficulty.mortgage);
     const rRatio = num(view.rules.redeem, view.difficulty.redeem);
-    const shortH = Math.min(6, horizon(view));
+    const shortH = Math.min(8, horizon(view));
     for (const t of Array.isArray(canSell) ? canSell : []) {
       const prov = provinceOf(t);
       if (!prov) continue;
@@ -490,21 +602,35 @@ export function createSmartPolicy(cfg = {}) {
       const full = view.ownsProvince(p.id, prov) ? 1.5 : 1;
       opts.push({ action: { type: 'mortgage', tile: t }, raise, loss: (price * (rRatio - mRatio) + lost) * full });
     }
+    const pinjolMax = num(view.difficulty.pinjol?.max);
+    const pinjolRate = num(view.difficulty.pinjol?.interest, 1);
+    const richest = Math.max(0, ...view.opponents.map((o) => o.cash));
+    const loanOk = Boolean(canLoan) && !triedLoan;
     if (opts.length) {
       opts.forEach((o) => (o.rate = o.loss / Math.max(1, o.raise) - (o.raise >= need ? 0.01 : 0)));
       opts.sort((x, y) => x.rate - y.rate || x.action.tile - y.action.tile);
-      const pick = opts[0].action;
-      return why(`gali lubang: ${pick.type} ${pick.tile} (kerugian per rupiah terkecil)`, pick);
+      const best = opts[0];
+      // Kalau game menampilkan Pinjol/pinjaman bersamaan dengan jual/gadai, bandingkan biayanya: menghancurkan
+      // provinsi lengkap (bangunan dijual rugi + sewa hilang) bisa lebih mahal dari bunga Pinjol.
+      if (canPinjol && pinjolMax >= need && pinjolRate < best.rate) {
+        return why(`Pinjol (${Math.round(pinjolRate * 100)}%) lebih murah dari ${best.action.type}`, {
+          type: 'pinjol',
+        });
+      }
+      if (loanOk && richest >= need && 0.25 < best.rate) {
+        return why(`minta pinjaman: lebih murah dari ${best.action.type}`, { type: 'requestLoan' });
+      }
+      return why(`gali lubang: ${best.action.type} ${best.action.tile} (kerugian per rupiah terkecil)`, best.action);
     }
-    const pinjolMax = view.difficulty.pinjol?.max ?? 0;
-    const richest = Math.max(0, ...view.opponents.map((o) => o.cash));
-    if (canLoan && !triedLoan && richest >= need) {
+    if (loanOk && richest >= need) {
       return why('minta pinjaman pemain (bunga biasanya < Pinjol)', { type: 'requestLoan' });
     }
     if (canPinjol && pinjolMax >= need) return why('ambil Pinjol untuk bertahan', { type: 'pinjol' });
-    if (canLoan && !triedLoan) return why('minta pinjaman (upaya terakhir)', { type: 'requestLoan' });
+    if (loanOk) return why('minta pinjaman (upaya terakhir)', { type: 'requestLoan' });
     if (canPinjol) return why('Pinjol walau mungkin kurang', { type: 'pinjol' });
-    return why('tidak ada pilihan lain: bangkrut', { type: 'bankrupt' });
+    return why(pinjolSeen ? 'Pinjol nonaktif & tidak ada pinjaman: bangkrut' : 'tidak ada pilihan lain: bangkrut', {
+      type: 'bankrupt',
+    });
   };
 
   policy.lendOffer = (view, { borrowerId, amount } = {}) => {
@@ -517,7 +643,7 @@ export function createSmartPolicy(cfg = {}) {
     if (p.cash - amt < reserve * 1.2) return why('kas kita tidak cukup sehat untuk meminjamkan', null);
     if (view.roundsLeft <= view.difficulty.loanTurns) return why('game hampir selesai, pinjaman tak kembali', null);
     const bNet = view.netWorth(b.id);
-    if (view.gameMode === 'survival' && bNet > view.netWorth(p.id)) return why('jangan bantu pemimpin', null);
+    if (bNet > view.netWorth(p.id)) return why('jangan bantu pemain yang lebih kaya', null);
     const capacity = Math.max(0, bNet) + num(b.salary, view.difficulty.salary) * view.difficulty.loanTurns * 0.5;
     const ratio = capacity > 0 ? (amt * 1.5) / capacity : Infinity;
     let pct;
@@ -533,7 +659,7 @@ export function createSmartPolicy(cfg = {}) {
     return why(`tawarkan pinjaman ${pct}% (rasio risiko ${ratio.toFixed(2)})`, pct);
   };
 
-  policy.acceptLoan = (view, { offers = [] } = {}) => {
+  policy.acceptLoan = (view, { offers = [], canPinjol, owe } = {}) => {
     const list = (Array.isArray(offers) ? offers : [])
       .map((o) => ({
         lender: o?.lender ?? o?.lenderId ?? o?.name ?? null,
@@ -544,7 +670,13 @@ export function createSmartPolicy(cfg = {}) {
     list.sort((a, b) => a.pct - b.pct);
     const best = list[0];
     const pj = view?.difficulty?.pinjol;
-    if (pj && view.pinjolAvailable(view.meId) && pj.interest * 100 < best.pct && !flags.keepLoanToEnd) {
+    // Tolak pinjaman pemain demi Pinjol hanya kalau tombol Pinjol memang aktif dan plafonnya cukup.
+    const pinjolUsable =
+      pj &&
+      canPinjol !== false &&
+      view.pinjolAvailable(view.meId) &&
+      (typeof owe !== 'number' || !Number.isFinite(owe) || pj.max >= owe);
+    if (pinjolUsable && pj.interest * 100 < best.pct && !flags.keepLoanToEnd) {
       return why(`Pinjol (${pj.interest * 100}%) lebih murah dari ${best.pct}%`, null);
     }
     return why(`terima bunga terendah ${best.pct}% dari ${best.lender}`, String(best.lender));
