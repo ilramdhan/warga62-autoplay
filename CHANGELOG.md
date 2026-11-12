@@ -4,6 +4,18 @@ Semua perubahan penting pada proyek ini dicatat di berkas ini.
 
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/), dan proyek ini memakai [Semantic Versioning](https://semver.org/lang/id/).
 
+## [2.1.0](https://github.com/ilramdhan/warga62-autoplay/compare/v2.0.0...v2.1.0) (2026-11-12)
+
+
+### Features
+
+* bot auto-play Warga +62 (extension + runner + strategi) ([e726ed7](https://github.com/ilramdhan/warga62-autoplay/commit/e726ed73c0dac45e542c05ad417758b12868af8c))
+
+
+### Bug Fixes
+
+* sambungkan perencana pencapaian & cegah loop Gali Lubang ([f863854](https://github.com/ilramdhan/warga62-autoplay/commit/f863854fd9b329cbf2a6da91081af279fa17fa98))
+
 ## [Unreleased]
 
 Belum ada perubahan.

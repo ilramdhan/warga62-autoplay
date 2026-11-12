@@ -1,6 +1,6 @@
 {
   "name": "warga62-autoplay",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Bot auto-play untuk Warga +62 (game monopoli Indonesia) khusus room privat dengan akun milik sendiri: Chrome extension + Playwright runner.",
   "private": true,
   "type": "module",
