@@ -147,6 +147,32 @@ export function isSelected(el) {
   return null;
 }
 
+/**
+ * Opsi setelan room = komponen Segmented: `<label>` berisi `<input type=radio class=sr-only>` + teks.
+ * Cari label (prioritas) yang teksnya sama persis; fallback ke button/role=button/role=radio.
+ */
+export function optionByText(text, root = document) {
+  const want = norm(text);
+  const radioLabels = [...root.querySelectorAll('label')].filter(isVisible);
+  const hit = radioLabels.find(
+    (l) => l.querySelector('input[type="radio"], input[type="checkbox"]') && norm(l.textContent) === want,
+  );
+  if (hit) return hit;
+  return (
+    [...root.querySelectorAll('button, a[href], [role="button"], [role="radio"]')]
+      .filter(isVisible)
+      .find((b) => norm(b.textContent) === want) ?? null
+  );
+}
+
+/** Apakah opsi (label radio / tombol) sedang terpilih: dari input di dalamnya, lalu aria/data-state. */
+export function optionChecked(el) {
+  if (!el) return null;
+  const input = el.querySelector ? el.querySelector('input[type="radio"], input[type="checkbox"]') : null;
+  if (input) return !!input.checked;
+  return isSelected(el);
+}
+
 /** Status centang checkbox (input atau role=checkbox). */
 export function isChecked(el) {
   if (!el) return false;
