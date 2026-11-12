@@ -4,6 +4,13 @@ Semua perubahan penting pada proyek ini dicatat di berkas ini.
 
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/), dan proyek ini memakai [Semantic Versioning](https://semver.org/lang/id/).
 
+## [2.1.5](https://github.com/ilramdhan/warga62-autoplay/compare/v2.1.4...v2.1.5) (2026-11-12)
+
+
+### Bug Fixes
+
+* **lobby:** deteksi kehadiran dari daftar pemain, bukan teks body ([290e2a9](https://github.com/ilramdhan/warga62-autoplay/commit/290e2a905553b528cd8ad6d47a93256ec73ace1d))
+
 ## [2.1.4](https://github.com/ilramdhan/warga62-autoplay/compare/v2.1.3...v2.1.4) (2026-11-12)
 
 
