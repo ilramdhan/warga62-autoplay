@@ -4,6 +4,13 @@ Semua perubahan penting pada proyek ini dicatat di berkas ini.
 
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/), dan proyek ini memakai [Semantic Versioning](https://semver.org/lang/id/).
 
+## [2.3.0](https://github.com/ilramdhan/warga62-autoplay/compare/v2.2.1...v2.3.0) (2026-11-24)
+
+
+### Features
+
+* strategi sesuai aturan resmi, pinjaman aman, engine lebih tahan, UI/UX & tooling ([#17](https://github.com/ilramdhan/warga62-autoplay/issues/17)) ([cda1bd1](https://github.com/ilramdhan/warga62-autoplay/commit/cda1bd114bf0478dbe5259ec7df0dd020cf5c368))
+
 ## [2.2.1](https://github.com/ilramdhan/warga62-autoplay/compare/v2.2.0...v2.2.1) (2026-11-12)
 
 
