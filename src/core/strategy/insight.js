@@ -3,7 +3,7 @@
  * dan ringkasan strategi yang sedang dipakai. Hanya memakai info yang terlihat pemain biasa.
  */
 import { PROVINCES, provinceOf } from '../data/board.js';
-import { expectedRentExposure, recommendedReserve } from './risk.js';
+import { expectedRentExposure, policyReserve } from './risk.js';
 
 const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
 const lc = (s) =>
@@ -47,8 +47,17 @@ export function buildInsight(view, cfg = {}, memory = {}) {
   const me = view.me;
   const own = new Set((cfg.accounts ?? []).map(lc));
   const rt = num(cfg.strategy?.riskTolerance, 0.5);
-  const reserve = recommendedReserve(view, me.id, { turns: 2, riskTolerance: rt });
-  const exp = expectedRentExposure(view, me.id, 2);
+  // Cadangan sama dengan yang dipakai policy smart (bukan recommendedReserve polos), supaya Monitor cocok.
+  const flags = cfg.policyFlags && typeof cfg.policyFlags === 'object' ? cfg.policyFlags : {};
+  const target = ['perfect', 'cupu', 'biasa'].includes(flags.rollTarget) ? flags.rollTarget : 'perfect';
+  const reserve = policyReserve(view, {
+    riskTolerance: rt,
+    reserveRounds: cfg.strategy?.reserveRounds,
+    flags,
+    target,
+    playerId: me.id,
+  });
+  const exp = expectedRentExposure(view, me.id, 2, target);
   const myNet = view.netWorth(me.id);
   const prev = (memory.players ??= {});
 
@@ -152,6 +161,16 @@ export function buildInsight(view, cfg = {}, memory = {}) {
       strategy.push('Mode bertahan: tidak bangun/ambil alih; Gali Lubang = jual/gadai termurah → pinjaman → Pinjol.');
     }
   }
+  // Negara ikut diperingkat dengan Kas Negara (Survival: biasanya #1 kecuali kekayaan pemain > Kas Negara).
+  const treasury = num(view.treasury);
+  const vsNegara = treasury > 0 ? (myNet >= treasury ? 'di atas Kas Negara' : 'di bawah Kas Negara') : null;
+  if (vsNegara && view.gameMode === 'ronde' && view.roundsLeft <= 2) {
+    strategy.push(
+      myNet >= treasury
+        ? 'Ronde akhir: jaga kekayaan di atas Kas Negara (tahan jaminan/bayar ke Negara yang tak perlu).'
+        : 'Ronde akhir: kekayaan di bawah Kas Negara; Negara diperingkat di atas kita.',
+    );
+  }
   if (view.crisis) {
     strategy.push(`Krisis aktif: sewa naik ×${view.rentMultiplier.toFixed(2)}; cadangan otomatis lebih besar.`);
   }
@@ -161,6 +180,9 @@ export function buildInsight(view, cfg = {}, memory = {}) {
     notes.push(`Risiko: sewa terburuk 2 giliran (${Math.round(exp.worst / 1e5) / 10} jt) > kas.`);
   }
   if (view.gameMode === 'ronde' && Number.isFinite(view.roundsLeft)) notes.push(`Sisa ${view.roundsLeft} ronde.`);
+  if (vsNegara) {
+    notes.push(`Kekayaan ${Math.round(myNet / 1e5) / 10} jt ${vsNegara} (${Math.round(treasury / 1e5) / 10} jt).`);
+  }
   const pj = view.difficulty.pinjol;
   notes.push(
     pj
@@ -182,6 +204,8 @@ export function buildInsight(view, cfg = {}, memory = {}) {
       exposure: Math.round(exp.expected),
       stance,
       stanceWhy,
+      treasury,
+      vsNegara,
     },
     opponents,
     leaderName: leader?.name ?? null,

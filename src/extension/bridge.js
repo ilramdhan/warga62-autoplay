@@ -1,9 +1,13 @@
 // Content script (ISOLATED world): jembatan chrome.storage <-> halaman (bot.js di MAIN world).
+// Pesan dari halaman bisa dikirim skrip mana pun di MAIN world: event disaring dulu (sanitizeBotEvent)
+// sebelum ditulis ke chrome.storage.
+import { BOT_SOURCE, HOST_SOURCE, sanitizeBotEvent } from '../core/protocol.js';
+
 const KEYS = { config: 'w62.config', status: 'w62.status', logs: 'w62.logs', command: 'w62.command' };
 const MAX_LOGS = 500;
 
 function toPage(payload) {
-  window.postMessage({ source: 'w62-host', ...payload }, location.origin);
+  window.postMessage({ source: HOST_SOURCE, ...payload }, location.origin);
 }
 
 async function sendConfig() {
@@ -45,18 +49,20 @@ async function flushLogs() {
 window.addEventListener('message', (ev) => {
   if (ev.source !== window || ev.origin !== location.origin) return;
   const d = ev.data;
-  if (!d || d.source !== 'w62-bot') return;
+  if (!d || typeof d !== 'object' || d.source !== BOT_SOURCE) return;
   // Bot dimuat setelah bridge (document_idle): saat minta config / siap, kirim ulang.
   if (d.type === 'request-config' || d.type === 'ready') {
     sendConfig();
     return;
   }
-  if (d.type !== 'event' || !d.event) return;
-  const e = d.event;
+  if (d.type !== 'event') return;
+  const e = sanitizeBotEvent(d.event);
+  if (!e) return;
   if (e.type === 'status') {
     setStatus({ ...e, receivedAt: Date.now(), url: location.pathname });
   } else {
-    logQueue.push({ ts: e.ts || Date.now(), ...e });
+    if (logQueue.length >= MAX_LOGS) logQueue.shift();
+    logQueue.push(e);
     flushLogs();
   }
 });

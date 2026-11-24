@@ -4,7 +4,9 @@ const CONFIG_KEY = 'w62.config';
 // Agar bridge.js (content script) boleh menulis status ke storage.session.
 function allowSession() {
   try {
-    chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' });
+    // setAccessLevel mengembalikan Promise; tangkap penolakan agar tidak jadi "Uncaught (in promise)".
+    const p = chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' });
+    if (p && typeof p.catch === 'function') p.catch(() => {});
   } catch (_e) {}
 }
 

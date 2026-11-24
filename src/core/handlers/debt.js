@@ -62,7 +62,7 @@ export default {
     const oweText = findLeaf(/kas minus/);
     const owe = oweText ? Math.abs(parseRupiah(oweText.textContent) ?? 0) : Math.max(0, -(ctx.me?.cash ?? 0));
     // Cegah loop: setelah "Minta pinjaman" ditolak ("Tidak jadi, pilih lagi") policy jangan diminta
-    // mengulang requestLoan. Jejak ini auto-reset antar-episode (kadaluarsa 15 dtk) & saat game baru.
+    // mengulang requestLoan. Jejak ini auto-reset antar-episode (kadaluarsa 45 dtk) & saat game baru.
     const triedLoan = now - (ctx.memo.debtTriedLoanAt ?? 0) < 45000;
     const info = {
       owe,

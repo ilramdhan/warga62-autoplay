@@ -1,11 +1,34 @@
+/* Token warna. Disalin identik di popup.css dan options.css: ubah keduanya bersamaan. */
 :root {
+  color-scheme: light dark;
   --paper: #f7f0dc;
   --paper-2: #efe5c6;
   --card: #fffaf0;
+  --field: #fff;
   --ink: #1b1a17;
   --sun: #ffc61a;
+  --on-sun: #1b1a17;
   --merah: #c7281c;
+  --hijau: #1f7a3d;
+  --on-accent: #fff;
   --muted: #6a6556;
+  --inverse-bg: #1b1a17;
+  --inverse-fg: #ffc61a;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #1a1915;
+    --paper-2: #24221c;
+    --card: #211f1a;
+    --field: #2c2a23;
+    --ink: #f1ead6;
+    --merah: #ff7466;
+    --hijau: #4cc37a;
+    --on-accent: #1a1915;
+    --muted: #b8b09a;
+    --inverse-bg: #ffc61a;
+    --inverse-fg: #1a1915;
+  }
 }
 * {
   box-sizing: border-box;
@@ -47,6 +70,7 @@ h2 {
 }
 .plus {
   background: var(--sun);
+  color: var(--on-sun);
   padding: 0 8px;
   border: 3px solid var(--ink);
   box-shadow: 3px 3px 0 var(--ink);
@@ -59,6 +83,7 @@ h2 {
   padding: 10px 14px;
   border: 3px solid var(--ink);
   background: var(--sun);
+  color: var(--on-sun);
   margin-bottom: 20px;
 }
 
@@ -91,9 +116,23 @@ h2 {
   border-bottom: 0;
 }
 .tabs button[aria-selected='true'] {
-  background: var(--ink);
-  color: var(--sun);
+  background: var(--inverse-bg);
+  color: var(--inverse-fg);
   font-weight: 800;
+}
+.tabs button.has-error::after {
+  content: ' (!)';
+  color: var(--merah);
+}
+.tabs button.has-error[aria-selected='true']::after {
+  color: inherit;
+}
+.tab:focus-visible {
+  outline-offset: 6px;
+}
+[aria-invalid='true'] {
+  border-color: var(--merah);
+  box-shadow: inset 0 0 0 1px var(--merah);
 }
 main {
   border: 3px solid var(--ink);
@@ -124,7 +163,7 @@ textarea {
   padding: 8px 10px;
   font: inherit;
   color: var(--ink);
-  background: #fff;
+  background: var(--field);
   border: 2px solid var(--ink);
   border-radius: 0;
 }
@@ -158,10 +197,11 @@ input[type='range'] {
 .choice {
   padding: 12px;
   border: 2px solid var(--ink);
-  background: #fff;
+  background: var(--field);
 }
 .choice:has(input:checked) {
   background: var(--sun);
+  color: var(--on-sun);
 }
 input[type='checkbox'],
 input[type='radio'] {
@@ -195,7 +235,7 @@ input[type='radio'] {
   font-weight: 700;
   cursor: pointer;
   border: 2px solid var(--ink);
-  background: #fff;
+  background: var(--field);
   color: var(--ink);
   box-shadow: 3px 3px 0 var(--ink);
 }
@@ -205,6 +245,7 @@ input[type='radio'] {
 }
 .btn.primary {
   background: var(--sun);
+  color: var(--on-sun);
   font-size: 16px;
   padding: 10px 24px;
 }
@@ -226,18 +267,49 @@ input[type='radio'] {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 4px 4px 10px;
+  padding: 6px 6px 6px 12px;
   border: 2px solid var(--ink);
-  background: #fff;
+  background: var(--field);
   font-weight: 600;
 }
 .chips button {
   border: 0;
-  background: var(--ink);
-  color: var(--sun);
+  background: var(--inverse-bg);
+  color: var(--inverse-fg);
   cursor: pointer;
   font-weight: 800;
-  padding: 2px 8px;
+  padding: 4px 10px;
+  min-height: 24px;
+}
+.roster {
+  border: 0;
+  padding: 0;
+  margin: 0 0 14px;
+}
+.roster legend {
+  font-weight: 700;
+  padding: 0;
+}
+.roster[aria-invalid='true'] .roster-list {
+  outline: 3px solid var(--merah);
+  outline-offset: 2px;
+}
+.roster-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.roster-list label {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  font-weight: 600;
+}
+.roster-warn {
+  margin: 0;
+  padding: 6px 10px;
+  border: 2px solid var(--ink);
+  background: var(--field);
 }
 .ach-list {
   display: grid;
@@ -251,9 +323,9 @@ input[type='radio'] {
   display: flex;
   gap: 8px;
   align-items: flex-start;
-  padding: 6px 8px;
+  padding: 10px 12px;
   border: 2px solid var(--ink);
-  background: #fff;
+  background: var(--field);
 }
 .ach-list small {
   display: block;
@@ -267,7 +339,7 @@ input[type='radio'] {
   overflow-wrap: anywhere;
   background: var(--paper-2);
   border: 2px solid var(--ink);
-  padding: 10px;
+  padding: 12px;
   font:
     12px/1.45 ui-monospace,
     Menlo,
@@ -293,13 +365,28 @@ hr {
   margin-left: auto;
   margin-right: auto;
 }
+.ext-change {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 8px 12px;
+  margin: 0 auto 8px;
+  border: 2px solid var(--ink);
+  background: var(--sun);
+  color: var(--on-sun);
+  font-weight: 600;
+}
+.ext-change[hidden] {
+  display: none;
+}
 .errors {
   list-style: none;
-  padding: 6px 10px;
+  padding: 8px 12px;
   margin: 0 auto 8px;
   border: 2px solid var(--merah);
   color: var(--merah);
-  background: #fff;
+  background: var(--field);
   font-weight: 600;
   max-height: 90px;
   overflow: auto;
@@ -307,6 +394,10 @@ hr {
 :focus-visible {
   outline: 3px solid var(--merah);
   outline-offset: 2px;
+}
+/* Jangan biarkan field yang difokus tertutup bilah Simpan yang menempel di bawah. */
+:focus {
+  scroll-margin-bottom: 160px;
 }
 @media (max-width: 700px) {
   .layout {
@@ -336,7 +427,7 @@ hr {
 .mon-card {
   border: 2px solid var(--ink);
   background: var(--paper-2);
-  padding: 10px;
+  padding: 12px 14px;
   margin-bottom: 12px;
 }
 .mon-card h3 {
@@ -364,22 +455,23 @@ hr {
   padding: 0 6px;
   border: 2px solid var(--ink);
   background: var(--sun);
-  color: var(--ink);
+  color: var(--on-sun);
   font-size: 12px;
   font-weight: 700;
 }
 .mon-crisis {
   background: var(--merah);
   border-color: var(--merah);
-  color: #fff;
+  color: var(--on-accent);
 }
 .mon-stance-agresif {
   background: var(--merah);
   border-color: var(--merah);
-  color: #fff;
+  color: var(--on-accent);
 }
 .mon-stance-bertahan {
   background: var(--paper);
+  color: var(--ink);
 }
 .mon-list {
   margin: 0 0 12px;
@@ -400,14 +492,14 @@ hr {
 }
 .mon-table th,
 .mon-table td {
-  padding: 4px 8px;
+  padding: 6px 10px;
   text-align: left;
   border-bottom: 1px solid var(--ink);
   vertical-align: top;
 }
 .mon-table thead th {
-  background: var(--ink);
-  color: var(--sun);
+  background: var(--inverse-bg);
+  color: var(--inverse-fg);
   white-space: nowrap;
 }
 .mon-name {

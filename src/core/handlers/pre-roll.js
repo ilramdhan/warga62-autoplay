@@ -4,6 +4,7 @@ import {
   findPlayerById,
   findPlayerByName,
   isMyTurnOrUnknown,
+  closeDialog,
   nameInElement,
   throttle,
   tileIndexFromText,
@@ -36,21 +37,8 @@ function state(ctx) {
 
 const SEND_STATUS = /^(pilih pemainnya dulu|kirim rp|minta rp|kasmu kurang)/;
 
-/**
- * Tutup modal: "Tutup" di dalam kotak (atau di halaman), lalu Escape bila masih terbuka.
- * @returns {Promise<boolean>} true bila `stillOpen()` tidak lagi benar (atau tak bisa dicek).
- */
-async function closeModal(ctx, box, stillOpen) {
-  const { findButton } = ctx.dom;
-  const open = typeof stillOpen === 'function' ? stillOpen : () => false;
-  const close = findButton('tutup', box ?? document) || findButton('tutup');
-  if (close) {
-    ctx.act.click(close);
-    if (await ctx.act.waitFor(() => !open(), { timeout: 1000 })) return true;
-  }
-  ctx.act.pressKey(document.activeElement ?? document.body, 'keydown', 'Escape');
-  return !!(await ctx.act.waitFor(() => !open(), { timeout: 800 }));
-}
+/** Tutup modal: "Tutup" di dalam kotak (atau di halaman), lalu Escape bila masih terbuka. */
+const closeModal = (ctx, box, stillOpen) => closeDialog(ctx, { box, isOpen: stillOpen, anywhere: true });
 
 /** Modal "Kirim / minta uang" sedang terbuka? (stepper Tambah + tombol status kirim). */
 export function sendModalOpen(ctx) {
@@ -135,18 +123,35 @@ async function doSend(ctx, action) {
   // lama (isConnected=false) membuat loop berhenti setelah 1 klik ("jumlah tidak bertambah").
   const plusBtn = () => findButtonByAria('tambah', box, { enabledOnly: false });
   if (!plusBtn()) return giveUp('Kirim uang: tombol Tambah tidak ditemukan.');
+  // Jumlah terbaca dari label "Kirim RpX". Kalau tidak terbaca, BERHENTI (jangan menekan + sampai maksimum).
+  const amountNow = () => {
+    const submit = findButton(SUBMIT_SEND, box, { enabledOnly: false });
+    return submit ? parseRupiah(labelOf(submit)) : null;
+  };
+  let step = 0;
+  let prevAmount = null;
   for (let i = 0; i < 600; i++) {
     const pb = plusBtn();
     if (!pb || ctx.dom.isDisabled(pb)) break;
     if (!wantAll) {
-      const submit = findButton(SUBMIT_SEND, box, { enabledOnly: false });
-      const current = submit ? (parseRupiah(labelOf(submit)) ?? 0) : 0;
+      const current = amountNow();
+      if (current == null) return giveUp(`Kirim uang: jumlah tidak terbaca (${status() || '-'}).`);
+      if (prevAmount != null && current > prevAmount) step = Math.max(step, current - prevAmount);
+      prevAmount = current;
       if (current >= action.amount) break;
     }
     pb.click();
     await ctx.act.sleep(15);
   }
   await ctx.act.sleep(250);
+  if (!wantAll) {
+    const final = amountNow();
+    // Toleransi satu langkah stepper (jumlah target bisa berada di antara dua langkah).
+    const slack = step || prevAmount || 0;
+    if (final == null || final > action.amount + slack) {
+      return giveUp(`Kirim uang: jumlah ${final ?? '?'} melebihi rencana ${action.amount}; batal.`);
+    }
+  }
   const send = findButton(SUBMIT_SEND, box);
   if (!send) return giveUp(`Kirim uang: tombol kirim tidak aktif (${status() || '-'}).`);
   const text = labelOf(send);

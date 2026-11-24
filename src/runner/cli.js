@@ -4,7 +4,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { normalizeConfig } from '../core/config.js';
+import { normalizeConfig, validateConfig } from '../core/config.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SITE = 'https://mainwarga62.id';
@@ -20,8 +20,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let shuttingDown = false;
 const stopWaiters = new Set();
+/** Daftarkan fungsi yang dipanggil saat Ctrl+C. Mengembalikan fungsi untuk melepas pendaftaran. */
 function onShutdown(fn) {
+  if (shuttingDown) {
+    fn();
+    return () => {};
+  }
   stopWaiters.add(fn);
+  return () => stopWaiters.delete(fn);
 }
 
 // ---- util ------------------------------------------------------------------
@@ -79,14 +85,27 @@ async function cmdLogin(args) {
   if (!nick || nick === true) throw new Error('Pakai: login --account <nick>');
   const { chromium } = await loadPlaywright();
   const dir = join(PROFILES, safeDir(nick));
-  console.log(`Membuka browser untuk akun "${nick}". Login manual di jendela yang muncul, lalu tutup jendelanya.`);
+  console.log(
+    `Membuka browser untuk akun "${nick}". Login manual di jendela yang muncul, lalu keluar dari browser (macOS: Cmd+Q, bukan hanya tutup jendela).`,
+  );
   console.log(`Profil disimpan di ${dir} (berisi cookie login, jangan dibagikan).`);
-  const ctx = await chromium.launchPersistentContext(dir, { headless: false, viewport: null, args: CHROME_ARGS });
-  const closed = new Promise((r) => ctx.on('close', r));
-  onShutdown(() => ctx.close().catch(() => {}));
-  const page = ctx.pages()[0] || (await ctx.newPage());
-  await page.goto(`${SITE}/`).catch((e) => console.error('Gagal membuka situs:', e.message));
-  await closed;
+  // Login dibuka di Chromium biasa (tanpa dikendalikan Playwright/CDP). Google & Discord menolak login
+  // dari browser yang sedang diotomasi ("browser ini tidak aman"). Ini bukan penyamaran: saat login
+  // memang tidak ada otomasi, manusia yang mengetik. Cookie tersimpan di profil yang sama untuk `run`.
+  const { spawn } = await import('node:child_process');
+  const { mkdirSync } = await import('node:fs');
+  mkdirSync(dir, { recursive: true });
+  // --use-mock-keychain & --password-store=basic: Playwright memakai flag yang sama saat `run`. Tanpa ini
+  // cookie dienkripsi dengan Keychain macOS asli dan tidak bisa dibaca oleh `run` (akun terlihat logout).
+  const loginArgs = [`--user-data-dir=${dir}`, '--no-first-run', '--use-mock-keychain', '--password-store=basic'];
+  const child = spawn(chromium.executablePath(), [...loginArgs, `${SITE}/`], {
+    stdio: 'ignore',
+  });
+  onShutdown(() => child.kill());
+  await new Promise((resolve, reject) => {
+    child.on('error', reject);
+    child.on('exit', resolve);
+  });
   console.log('Profil tersimpan.');
 }
 
@@ -119,12 +138,16 @@ async function superviseAccount(pw, account, idx, base, headless, botSource) {
   const tag = (m) => console.log(`${paint(idx, `[${account}]`)} ${m}`);
   const guard = (code) => `if (location.origin === ${JSON.stringify(SITE)}) {\n${code}\n}`;
   let attempt = 0;
+  let userClosed = false;
 
-  while (!shuttingDown) {
+  while (!shuttingDown && !userClosed) {
     let ctx;
     let lastEvent = Date.now();
     let restart;
     const needRestart = new Promise((r) => (restart = r));
+    // Daftar SEBELUM membuka browser (Ctrl+C saat launch/goto tetap terdengar) dan lepas di finally
+    // supaya tiap restart tidak menumpuk waiter.
+    const unsubscribe = onShutdown(() => restart('shutdown'));
     try {
       ctx = await pw.chromium.launchPersistentContext(dir, {
         headless,
@@ -138,12 +161,18 @@ async function superviseAccount(pw, account, idx, base, headless, botSource) {
       });
       await ctx.addInitScript({ content: guard(`window.__W62_CONFIG__ = ${JSON.stringify(cfg)};`) });
       await ctx.addInitScript({ content: guard(botSource) });
-      ctx.on('close', () => restart('context ditutup'));
+      // Headful: jendela/halaman yang ditutup pengguna berarti "hentikan akun ini", bukan crash.
+      // Headless tidak punya jendela, jadi penutupan di sana tetap dianggap gangguan dan di-restart.
+      const closedByUser = (why) => {
+        if (!headless) userClosed = true;
+        restart(why);
+      };
+      ctx.on('close', () => closedByUser('context ditutup'));
       const page = ctx.pages()[0] || (await ctx.newPage());
       page.on('crash', () => restart('halaman crash'));
-      page.on('close', () => restart('halaman ditutup'));
+      page.on('close', () => closedByUser('halaman ditutup'));
 
-      for (let n = 0; ; n++) {
+      for (let n = 0; !shuttingDown; n++) {
         try {
           await page.goto(`${SITE}/`, { waitUntil: 'domcontentloaded', timeout: 45000 });
           break;
@@ -163,16 +192,17 @@ async function superviseAccount(pw, account, idx, base, headless, botSource) {
           page.goto(`${SITE}/`, { waitUntil: 'domcontentloaded' }).catch(() => {});
         }
       }, 60000);
-      onShutdown(() => restart('shutdown'));
       const reason = await needRestart;
       clearInterval(timer);
-      if (!shuttingDown) tag(`Restart: ${reason}.`);
+      if (userClosed) tag(`Jendela ditutup pengguna (${reason}); akun ini berhenti.`);
+      else if (!shuttingDown) tag(`Restart: ${reason}.`);
     } catch (e) {
       tag(`Error: ${e.message.split('\n')[0]}`);
     } finally {
+      unsubscribe();
       if (ctx) await ctx.close().catch(() => {});
     }
-    if (shuttingDown) break;
+    if (shuttingDown || userClosed) break;
     attempt++;
     await sleep(Math.min(60000, 2000 * 2 ** Math.min(attempt, 5)));
   }
@@ -193,6 +223,15 @@ async function cmdRun(args) {
   }
   const headless = args.headful ? false : raw.headless !== false;
   const base = normalizeConfig({ ...raw, myName: raw.hostName });
+  // runner.config `accounts` = akun yang ikut main (roster). `knownAccounts` (opsional) = akun milikmu lain
+  // yang boleh ada di room tanpa menjeda bot.
+  const known = Array.isArray(raw.knownAccounts) ? raw.knownAccounts : [];
+  const shared = { ...base, accounts: [...accounts, ...known], roster: accounts, hostName: raw.hostName };
+  // Validasi config tiap akun SEBELUM membuka browser: config salah = berhenti dengan kode non-nol.
+  const problems = accounts.flatMap((acc) => validateConfig(accountConfig(shared, acc)).map((e) => `[${acc}] ${e}`));
+  if (problems.length) {
+    throw new Error(`Config tidak valid (${file}):\n  ${problems.join('\n  ')}`);
+  }
   const botSource = readFileSync(BOT_JS, 'utf8');
   const pw = await loadPlaywright();
 
@@ -205,7 +244,7 @@ async function cmdRun(args) {
   for (const acc of ordered) {
     if (shuttingDown) break;
     const idx = accounts.indexOf(acc);
-    tasks.push(superviseAccount(pw, acc, idx, { ...base, accounts, hostName: raw.hostName }, headless, botSource));
+    tasks.push(superviseAccount(pw, acc, idx, shared, headless, botSource));
     await sleep(2000);
   }
   await Promise.all(tasks);
@@ -218,8 +257,8 @@ async function cmdDoctor(args) {
     if (!pass) ok = false;
     console.log(`${pass ? '[OK]  ' : '[GAGAL]'} ${msg}`);
   };
-  const major = Number(process.versions.node.split('.')[0]);
-  line(major >= 20, `Node ${process.versions.node} (butuh >= 20)`);
+  const [major, minor] = process.versions.node.split('.').map(Number);
+  line(major > 22 || (major === 22 && minor >= 13), `Node ${process.versions.node} (butuh >= 22.13)`);
   try {
     await loadPlaywright();
     line(true, 'Playwright terpasang');

@@ -10,3 +10,6 @@ runner.config.json
 
 # Log bot yang diekspor pengguna
 .claude/warga62-log*.json
+
+# Cache hook desain lokal
+.impeccable/

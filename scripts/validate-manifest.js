@@ -19,6 +19,9 @@ const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
 if (m.manifest_version !== 3) fail('manifest_version harus 3');
 if (m.name !== 'Warga +62 Autoplay') fail(`name tidak sesuai: ${m.name}`);
 if (m.version !== pkg.version) fail(`version ${m.version} != package.json ${pkg.version}`);
+// world: 'MAIN' di content_scripts butuh Chrome 111+; build menargetkan chrome114 (esbuild).
+const MIN_CHROME = '114';
+if (m.minimum_chrome_version !== MIN_CHROME) fail(`minimum_chrome_version harus "${MIN_CHROME}"`);
 if (JSON.stringify(m.permissions) !== '["storage"]') fail('permissions harus persis ["storage"]');
 
 const HOST = 'https://mainwarga62.id/*';

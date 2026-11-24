@@ -1,6 +1,8 @@
 # Handler
 
 Urut menurut `priority` (kecil dicek lebih dulu). `run()` yang mengembalikan `false` berarti "tidak ada aksi" (tidak mereset watchdog).
+Kembalikan `true` hanya bila benar-benar ada kemajuan (mis. `lobby-invite` hanya bila tombol `Undang` diklik); `true` tanpa kemajuan mematikan watchdog.
+`run()` dibatasi engine (`runTimeoutFor` di `engine.js`): `handler.timeoutMs` bila ada; handler keputusan giliran dibatasi 0,65 × jendela keputusan Online (kocok/pre-roll/urutan/pengadilan 15 dtk; beli/ambil alih/tol/kartu/utang/respons 20 dtk; bangun 30 dtk; `still-here` 10 dtk), dikali tempo bila terbaca (Santai 1,5×, Kilat 0,6×), minimal 7 dtk; handler lain (lobby/beranda/galat) 30 dtk. Lewat dari itu dicatat dan dianggap `false`.
 Scope: `any` selalu berlaku; `home` di `/` dan `/online`; `lobby` di `/room/*` saat ada tombol "Bagikan link"/"Link tersalin"; `game` di `/room/*` selain itu.
 
 | Prio | id              | Scope | Deteksi                                                                                      | Aksi                                                                                                         |
@@ -8,6 +10,7 @@ Scope: `any` selalu berlaku; `home` di `/` dan `/online`; `lobby` di `/room/*` s
 | 5    | error           | any   | `Muat ulang` / `Cari room lain`                                                              | ke `/` (jeda 15 dtk)                                                                                         |
 | 10   | invite-incoming | any   | judul `<nama> mengajak mabar`                                                                | guest + dari hostName + tidak sedang main: `Gabung`; selain itu `Tutup`/`Nanti`                              |
 | 12   | afk             | any   | `Aku kembali`                                                                                | klik                                                                                                         |
+| 13   | still-here      | any   | judul `Masih ikut?` + tombol konfirmasi (label belum diverifikasi)                           | klik `Masih ikut`/`Ikut`/`Ya` di kotak prompt; tombol keluar/tolak tidak pernah diklik                       |
 | 15   | money-request   | game  | judul `<nama> minta uang` + `Tolak`                                                          | `policy.respondMoneyRequest` -> `Kirim Rp…` / `Tolak`                                                        |
 | 20   | order           | game  | `Lempar ulang`, `Mulai main` (bukan lobby), `Lanjut` saat `order_roll`                       | klik                                                                                                         |
 | 22   | endgame         | game  | `game_over`, `Lewati N/M`, `Bagikan hasil`, `Mulai lagi`                                     | `Lewati` sekali (memo), `Lanjut`, host `Mulai lagi`/`Main lagi`                                              |
@@ -30,7 +33,7 @@ Scope: `any` selalu berlaku; `home` di `/` dan `/online`; `lobby` di `/room/*` s
 | 82   | lobby-invite    | lobby | host, akun belum hadir (`lobbyPresence`) dan lewat `inviteRetryMs`; modal tertinggal terbuka | `Undang teman` -> tunggu daftar async -> `Undang` hanya akun yang belum hadir -> `Tutup`; modal basi ditutup |
 | 84   | lobby-start     | lobby | host, `Mulai main` aktif                                                                     | cukup akun hadir (semua, atau ≥ `minStartPlayers` setelah jendela undangan) dan room terkonfigurasi aman     |
 | 90   | join-page       | any   | guest di `/room/*`, bukan lobby, `Gabung`                                                    | klik                                                                                                         |
-| 95   | online          | home  | host di `/online`, `Buat room`                                                               | klik                                                                                                         |
+| 95   | online          | home  | host di `/online`, `Buat room`                                                               | klik, tunggu pindah ke room ≤ 15 dtk; klik ulang paling cepat 20 dtk kemudian (`memo.roomCreateAt`)          |
 | 96   | home            | home  | host di `/`, link `Main Online`                                                              | klik                                                                                                         |
 
 Fallback tanpa state/policy: beli ya, bangun tidak, pilihan kartu opsi pertama, kartu simpanan dipakai, tol gerbang pertama, kocok perfect, utang jual -> gadai -> pinjaman -> bangkrut.
@@ -43,3 +46,9 @@ Nama akun dicari di teks pendek yang terlihat di ruang tunggu, **di luar** modal
 diverifikasi; bila nama tidak terbaca, host tetap mulai setelah jendela undangan bila `Mulai main` aktif.
 
 Guest yang menunggu di ruang tunggu tidak memicu watchdog (dulu dipulangkan ke beranda setelah `watchdogMs`).
+Terlepas dari aksi handler, bot yang berada di ruang tunggu lebih dari 5× `watchdogMs` (`memo.lobbySince`) kembali ke beranda.
+
+## Memo per game
+
+`ctx.memo` hanya dikosongkan saat path berubah (id room ada di URL), ronde mundur, keluar dari `game_over`, id game
+berubah, atau daftar pemain sama sekali berbeda. State yang sesaat tidak terbaca tidak lagi menghapus memo.

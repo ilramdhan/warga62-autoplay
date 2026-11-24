@@ -4,9 +4,12 @@
  */
 
 let cache = null;
-/** Buang cache daftar tombol (otomatis dibuang di akhir blok sinkron, atau setelah klik/tidur). */
+/** Cache hasil findLeaf per root+matcher; hidup sampai invalidate() (engine tiap tick, act tiap klik/tidur). */
+let leafCache = new WeakMap();
+/** Buang cache daftar tombol (otomatis dibuang di akhir blok sinkron, atau setelah klik/tidur) dan cache findLeaf. */
 export function invalidate() {
   cache = null;
+  leafCache = new WeakMap();
 }
 
 /** @param {string} s */
@@ -91,6 +94,18 @@ const LEAF_SELECTOR = 'h1,h2,h3,h4,h5,h6,p,div,span,label,strong,b,li';
  * Elemen dengan sedikit anak ikut dipertimbangkan agar judul "<span>nama</span> mengajak mabar" terbaca.
  */
 export function findLeaf(matcher, root = document) {
+  let perRoot = leafCache.get(root);
+  if (!perRoot) leafCache.set(root, (perRoot = new Map()));
+  if (perRoot.has(matcher)) {
+    const hit = perRoot.get(matcher);
+    if (hit === null || hit.isConnected) return hit;
+  }
+  const found = scanLeaf(matcher, root);
+  perRoot.set(matcher, found);
+  return found;
+}
+
+function scanLeaf(matcher, root) {
   const all = root.querySelectorAll(LEAF_SELECTOR);
   for (const el of all) {
     if (el.children.length > 3) continue;

@@ -115,7 +115,8 @@ function needlePos(needle, bar) {
 
 /**
  * Tahan tombol kocok (Enter keydown), baca posisi jarum tiap frame, lepas saat masuk zona target.
- * Mode ketuk: keydown pertama memulai, keydown kedua melempar. Pengaman: lepas otomatis setelah 4 dtk.
+ * Mode ketuk: keydown pertama memulai, keydown kedua melempar. Pengaman: lepas otomatis setelah 4 dtk
+ * (timer cadangan timeoutMs+500 ms bila requestAnimationFrame tidak berjalan, mis. tab tersembunyi).
  * @param {HTMLElement} button
  * @param {{target?: 'perfect'|'cupu'|'biasa', timeoutMs?: number}} [opts]
  * @returns {Promise<{pos:number, reason:'zona'|'timeout'|'tanpa-jarum', ms:number}>}
@@ -129,12 +130,20 @@ export function holdRoll(button, { target = 'perfect', timeoutMs = 4000 } = {}) 
   const t0 = performance.now();
   let needle = findNeedle(button);
   return new Promise((resolve) => {
+    let done = false;
+    let fallback = null;
     const finish = (reason, pos) => {
+      if (done) return;
+      done = true;
+      clearTimeout(fallback);
       release();
       invalidate();
       resolve({ pos, reason, ms: Math.round(performance.now() - t0) });
     };
+    // rAF berhenti di tab tersembunyi: timer cadangan memastikan tombol selalu dilepas.
+    fallback = setTimeout(() => finish('timeout', NaN), timeoutMs + 500);
     const loop = () => {
+      if (done) return;
       const el = performance.now() - t0;
       if (!needle || !needle.isConnected) needle = findNeedle(button);
       const pos = needle ? needlePos(needle, button.previousElementSibling) : NaN;

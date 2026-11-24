@@ -6,12 +6,12 @@ Extension ini menjalankan bot langsung di tab `https://mainwarga62.id` pada Chro
 
 ## 1. Dapatkan extension
 
-**Opsi A: dari file zip** (paling mudah)
+### Opsi A: dari file zip (paling mudah)
 
 1. Unduh `warga62-autoplay-extension-v<versi>.zip` dari halaman Releases di GitHub, atau buat sendiri dengan `npm run build` (hasilnya ada di folder `dist/`).
 2. Ekstrak zip ke sebuah folder tetap, misalnya `~/warga62-extension`. Jangan hapus folder ini setelah dipasang.
 
-**Opsi B: build dari sumber**
+### Opsi B: build dari sumber
 
 ```bash
 npm ci
@@ -36,13 +36,22 @@ Satu profil Chrome = satu akun game. Untuk 2 sampai 8 akun, buat satu profil Chr
 1. Buka **Pengaturan lengkap** (dari popup). Di tab **Akun** isi:
    - nick akun di browser ini,
    - peran: **Host** untuk satu browser pembuat room, **Guest** untuk sisanya,
-   - daftar semua nick milikmu (2 sampai 8), nick host, dan nick pemenang untuk mode Grinding XP.
+   - **Daftar akun milikmu**: semua nick milikmu (maks. 30). Ini pengaman: bot dijeda bila ada pemain di luar daftar
+     ini. Hapus nick lama yang sudah tidak dipakai dengan tombol `x`.
+   - **Akun yang ikut main**: centang akun yang main di sesi ini (maks. sama dengan **Maks. pemain** di tab Room,
+     termasuk dirimu). Host hanya mengundang dan menunggu akun yang dicentang. Nick sendiri, host, dan pemenang
+     selalu ikut. Bila kurang dari 3 akun muncul catatan: papan peringkat hanya menghitung game ≥10 ronde dengan ≥3
+     pemain.
+   - nick host, dan nick pemenang untuk mode Grinding XP.
 2. Pilih **Mode** (Grinding XP atau Arena pintar), atur **Aturan room**, **Strategi**, dan lainnya. Tekan **Simpan**.
 3. Buka `https://mainwarga62.id` di tab biasa.
 4. Klik ikon extension lalu tombol **MULAI**. Badge berubah menjadi `ON`.
 5. Ulangi di profil Chrome lain. Host membuat room dan mengundang akunmu yang lain; guest menerima undangan hanya dari nick host.
 
-Popup menampilkan status (state, handler, ronde, fase, kas), pilihan cepat peran dan mode, serta 20 baris log terakhir. Log lengkap, ekspor log, impor/ekspor konfigurasi, dan reset ada di halaman pengaturan.
+Popup menampilkan status (state, handler, ronde, fase, kas), pilihan cepat peran dan mode, serta 20 baris log terakhir.
+Bila ada pemain yang belum terdaftar, bot dijeda dan popup menawarkan **Semua pemain ini akun saya**: nama itu hanya
+ditambahkan ke **Daftar akun milikmu** (bukan ke Akun yang ikut main), nama yang ditambahkan ditampilkan, dan bisa
+dibatalkan dengan **Batalkan**. Log lengkap, ekspor log, impor/ekspor konfigurasi, dan reset ada di halaman pengaturan.
 
 ## Catatan
 

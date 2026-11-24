@@ -8,7 +8,10 @@ export const DEFAULT_CONFIG = {
   myName: '',
   role: 'host',
   mode: 'grind',
+  // Semua nick milik user (whitelist pengaman: pemain di luar daftar ini = bot dijeda). Boleh panjang.
   accounts: ['ilramdhan.dev', 'JULE'],
+  // Akun yang ikut main sesi ini (diundang host, ditunggu sebelum mulai). Maks room.maxPlayers, termasuk diri sendiri.
+  roster: ['ilramdhan.dev', 'JULE'],
   hostName: 'ilramdhan.dev',
   winnerName: 'JULE',
   room: {
@@ -37,6 +40,10 @@ export const DEFAULT_CONFIG = {
   },
   debug: false,
 };
+
+/** Batas daftar akun dikenal (whitelist) dan daftar akun sesi (roster). */
+export const MAX_KNOWN_ACCOUNTS = 30;
+export const MAX_ROSTER = 8;
 
 export const ALLOWED_ACCESS = ['privat', 'teman'];
 export const ROLES = ['host', 'guest'];
@@ -97,20 +104,39 @@ function strList(v, max, maxLen = 200) {
   return out;
 }
 
-/**
- * Nick sendiri, host, dan (mode grind) pemenang otomatis ikut terdaftar sebagai akun milik user,
- * supaya user tidak perlu mengetik ulang nick yang sudah diisi di field lain. Maks 8, tanpa duplikat.
- */
-function withOwnNames(list, src) {
-  const out = list.slice();
-  const add = (v) => {
-    const s = str(v).slice(0, 60);
-    if (s && out.length < 8 && !out.some((y) => y.toLowerCase() === s.toLowerCase())) out.push(s);
-  };
-  add(src.myName);
-  add(src.hostName);
-  if (oneOf(src.mode, MODES, DEFAULT_CONFIG.mode) === 'grind') add(src.winnerName);
+/** Nick sendiri, host, dan (mode grind) pemenang: selalu ikut main dan selalu akun milik user. */
+function ownNames(src) {
+  const out = [str(src.myName), str(src.hostName)];
+  if (oneOf(src.mode, MODES, DEFAULT_CONFIG.mode) === 'grind') out.push(str(src.winnerName));
+  return out.map((s) => s.slice(0, 60)).filter(Boolean);
+}
+
+/** Gabungkan daftar nama (urutan dipertahankan, tanpa duplikat beda huruf), maks `max`. */
+function unionNames(lists, max) {
+  const out = [];
+  for (const list of lists) {
+    for (const s of list) {
+      if (out.length >= max) return out;
+      if (s && !out.some((y) => y.toLowerCase() === s.toLowerCase())) out.push(s);
+    }
+  }
   return out;
+}
+
+/**
+ * Roster (akun sesi) dan accounts (akun dikenal). Roster = nick sendiri/host/pemenang + roster tersimpan.
+ * Migrasi config lama (tanpa `roster`): roster diturunkan dari `accounts` lama, nick sendiri dulu, dipotong
+ * ke room.maxPlayers supaya nick basi tidak membuat daftar main melebihi kursi room.
+ * accounts selalu memuat semua nama roster.
+ */
+function accountLists(src, partial, maxPlayers) {
+  const own = ownNames(src);
+  const known = strList(src.accounts, MAX_KNOWN_ACCOUNTS, 60);
+  const hasRoster = isObj(partial) && Array.isArray(partial.roster);
+  const roster = hasRoster
+    ? unionNames([own, strList(src.roster, MAX_ROSTER, 60)], MAX_ROSTER)
+    : unionNames([own, known], Math.max(maxPlayers, own.length));
+  return { roster, accounts: unionNames([roster, known], MAX_KNOWN_ACCOUNTS) };
 }
 
 /**
@@ -135,6 +161,9 @@ export function normalizeConfig(partial = {}) {
   let dMax = num(delay[1], d.timing.actionDelayMs[1], 0, 10000);
   if (dMin > dMax) [dMin, dMax] = [dMax, dMin];
 
+  const maxPlayers = nearest(room.maxPlayers, PLAYER_OPTIONS, d.room.maxPlayers);
+  const lists = accountLists(src, partial, maxPlayers);
+
   const lend =
     typeof st.lendInterest === 'string' && st.lendInterest !== 'auto' ? Number(st.lendInterest) : st.lendInterest;
 
@@ -143,7 +172,8 @@ export function normalizeConfig(partial = {}) {
     myName: str(src.myName),
     role: oneOf(src.role, ROLES, d.role),
     mode: oneOf(src.mode, MODES, d.mode),
-    accounts: withOwnNames(strList(src.accounts, 8, 60), src),
+    accounts: lists.accounts,
+    roster: lists.roster,
     hostName: str(src.hostName) || (oneOf(src.role, ROLES, d.role) === 'host' ? str(src.myName) : ''),
     winnerName: str(src.winnerName),
     room: {
@@ -152,7 +182,7 @@ export function normalizeConfig(partial = {}) {
       rounds: nearest(room.rounds, ROUND_OPTIONS, d.room.rounds),
       difficulty: oneOf(room.difficulty, DIFFICULTIES, d.room.difficulty),
       startingCash: nearest(room.startingCash, CASH_OPTIONS, d.room.startingCash),
-      maxPlayers: nearest(room.maxPlayers, PLAYER_OPTIONS, d.room.maxPlayers),
+      maxPlayers,
       map: oneOf(room.map, MAPS, d.room.map),
       awards: bool(room.awards, d.room.awards),
       autoByAchievement: bool(room.autoByAchievement, d.room.autoByAchievement),
@@ -192,52 +222,106 @@ const sameName = (a, b) =>
 const hasName = (list, name) => Array.isArray(list) && list.some((n) => sameName(n, name));
 
 /**
+ * Validasi config dengan path field terkait (untuk menandai field di halaman Pengaturan).
+ * Pesan memakai label yang terlihat di UI, bukan nama identifier.
+ * @param {object} cfg
+ * @returns {{path: string, message: string}[]}
+ */
+export function validateConfigDetailed(cfg) {
+  const errors = [];
+  const add = (path, message) => errors.push({ path, message });
+  const c = isObj(cfg) ? cfg : {};
+  const accounts = Array.isArray(c.accounts) ? c.accounts : [];
+  // Config tanpa roster (bentuk lama yang belum dinormalisasi): roster = accounts.
+  const roster = Array.isArray(c.roster) ? c.roster : accounts;
+  const myName = typeof c.myName === 'string' ? c.myName.trim() : '';
+
+  if (!myName) add('myName', 'Nick kamu belum diisi.');
+  if (accounts.length < 1 || accounts.length > MAX_KNOWN_ACCOUNTS) {
+    add(
+      'accounts',
+      `Daftar akun milikmu harus berisi 1 sampai ${MAX_KNOWN_ACCOUNTS} nick (sekarang ${accounts.length}).`,
+    );
+  }
+  if (myName && !hasName(accounts, myName)) add('accounts', `Nick kamu "${myName}" tidak ada di daftar akun milikmu.`);
+  if (roster.length < 1 || roster.length > MAX_ROSTER) {
+    add('roster', `Akun yang ikut main harus 1 sampai ${MAX_ROSTER} nick (sekarang ${roster.length}).`);
+  }
+  if (myName && !hasName(roster, myName)) {
+    add('roster', `Nick kamu "${myName}" tidak dicentang di Akun yang ikut main.`);
+  }
+  const notKnown = roster.filter((n) => !hasName(accounts, n));
+  if (notKnown.length) add('roster', `Akun yang ikut main belum ada di daftar akun milikmu: ${notKnown.join(', ')}.`);
+  if (!ROLES.includes(c.role)) add('role', 'Peran harus Host atau Guest.');
+  if (!MODES.includes(c.mode)) add('mode', 'Mode harus Grinding XP atau Arena pintar.');
+
+  const hostName = typeof c.hostName === 'string' ? c.hostName.trim() : '';
+  // Guest tanpa hostName tetap boleh jalan (mis. bergabung manual ke game yang sudah dimulai);
+  // hanya saja undangan tidak akan diterima otomatis.
+  if (!hostName && c.role === 'host') add('hostName', 'Nick host belum diisi.');
+  else if (hostName && !hasName(roster, hostName)) {
+    add('hostName', `Host "${hostName}" tidak ada di Akun yang ikut main.`);
+  }
+  if (c.role === 'host' && hostName && myName && !sameName(hostName, myName)) {
+    add('hostName', 'Peran Host, tetapi Nick kamu berbeda dari Nick host.');
+  }
+  if (c.role === 'guest' && hostName && myName && sameName(hostName, myName)) {
+    add('hostName', 'Peran guest, tetapi Nick kamu sama dengan Nick host.');
+  }
+
+  const winnerName = typeof c.winnerName === 'string' ? c.winnerName.trim() : '';
+  if (c.mode === 'grind' && !winnerName) {
+    add('winnerName', 'Mode Grinding XP butuh Nick pemenang (akun yang dibuat menang).');
+  } else if (c.mode === 'grind' && winnerName && !hasName(roster, winnerName)) {
+    add('winnerName', `Pemenang "${winnerName}" tidak ada di Akun yang ikut main.`);
+  }
+
+  const room = isObj(c.room) ? c.room : {};
+  if (!ALLOWED_ACCESS.includes(room.access)) {
+    add('room.access', 'Akses room harus Privat atau Teman (room publik tidak diizinkan).');
+  }
+  if (Number.isFinite(room.maxPlayers) && roster.length > room.maxPlayers) {
+    add(
+      'roster',
+      `Akun yang ikut main (${roster.length}) melebihi Maks. pemain room (${room.maxPlayers}). ` +
+        'Kurangi centang di Akun yang ikut main atau naikkan Maks. pemain.',
+    );
+  }
+  const minStart = c.timing?.minStartPlayers;
+  if (c.role === 'host' && Number.isFinite(minStart) && minStart > roster.length) {
+    add(
+      'timing.minStartPlayers',
+      `Minimal pemain untuk mulai (${minStart}) melebihi Akun yang ikut main (${roster.length}).`,
+    );
+  }
+  return errors;
+}
+
+/**
+ * Peringatan informatif (tidak memblokir MULAI), mis. roster kecil. Format sama dengan validateConfigDetailed.
+ * @param {object} cfg
+ * @returns {{path: string, message: string}[]}
+ */
+export function configWarnings(cfg) {
+  const c = isObj(cfg) ? cfg : {};
+  const roster = Array.isArray(c.roster) ? c.roster : Array.isArray(c.accounts) ? c.accounts : [];
+  const out = [];
+  if (roster.length > 0 && roster.length < 3) {
+    out.push({
+      path: 'roster',
+      message:
+        `Hanya ${roster.length} akun yang ikut main. Catatan: papan peringkat hanya menghitung game ≥10 ronde ` +
+        'dengan ≥3 pemain.',
+    });
+  }
+  return out;
+}
+
+/**
  * Validasi config. Mengembalikan array pesan galat (Bahasa Indonesia); array kosong = valid.
  * @param {object} cfg
  * @returns {string[]}
  */
 export function validateConfig(cfg) {
-  const errors = [];
-  const c = isObj(cfg) ? cfg : {};
-  const accounts = Array.isArray(c.accounts) ? c.accounts : [];
-  const myName = typeof c.myName === 'string' ? c.myName.trim() : '';
-
-  if (!myName) errors.push('Nama akun (myName) belum diisi.');
-  if (accounts.length < 1 || accounts.length > 8) {
-    errors.push(`Daftar akun harus berisi 1 sampai 8 nama (sekarang ${accounts.length}).`);
-  }
-  if (myName && !hasName(accounts, myName)) errors.push(`Nama akun "${myName}" tidak ada di daftar akun.`);
-  if (!ROLES.includes(c.role)) errors.push('Peran (role) harus "host" atau "guest".');
-  if (!MODES.includes(c.mode)) errors.push('Mode harus "grind" atau "arena".');
-
-  const hostName = typeof c.hostName === 'string' ? c.hostName.trim() : '';
-  // Guest tanpa hostName tetap boleh jalan (mis. bergabung manual ke game yang sudah dimulai);
-  // hanya saja undangan tidak akan diterima otomatis.
-  if (!hostName && c.role === 'host') errors.push('Nama host (hostName) belum diisi.');
-  else if (hostName && !hasName(accounts, hostName)) errors.push(`Host "${hostName}" tidak ada di daftar akun.`);
-  if (c.role === 'host' && hostName && myName && !sameName(hostName, myName)) {
-    errors.push('Peran host, tetapi nama akun berbeda dari hostName.');
-  }
-  if (c.role === 'guest' && hostName && myName && sameName(hostName, myName)) {
-    errors.push('Peran guest, tetapi nama akun sama dengan hostName.');
-  }
-
-  const winnerName = typeof c.winnerName === 'string' ? c.winnerName.trim() : '';
-  if (c.mode === 'grind' && !winnerName) errors.push('Mode grind butuh winnerName (akun yang dibuat menang).');
-  else if (c.mode === 'grind' && winnerName && !hasName(accounts, winnerName)) {
-    errors.push(`Pemenang "${winnerName}" tidak ada di daftar akun.`);
-  }
-
-  const room = isObj(c.room) ? c.room : {};
-  if (!ALLOWED_ACCESS.includes(room.access)) {
-    errors.push('Akses room harus "privat" atau "teman" (room publik tidak diizinkan).');
-  }
-  if (Number.isFinite(room.maxPlayers) && accounts.length > room.maxPlayers) {
-    errors.push(`Jumlah akun (${accounts.length}) melebihi maksimal pemain room (${room.maxPlayers}).`);
-  }
-  const minStart = c.timing?.minStartPlayers;
-  if (c.role === 'host' && Number.isFinite(minStart) && minStart > accounts.length) {
-    errors.push('Minimal pemain untuk mulai melebihi jumlah akun.');
-  }
-  return errors;
+  return validateConfigDetailed(cfg).map((e) => e.message);
 }

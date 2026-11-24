@@ -1,11 +1,34 @@
+/* Token warna. Disalin identik di popup.css dan options.css: ubah keduanya bersamaan. */
 :root {
+  color-scheme: light dark;
   --paper: #f7f0dc;
   --paper-2: #efe5c6;
+  --card: #fffaf0;
+  --field: #fff;
   --ink: #1b1a17;
   --sun: #ffc61a;
+  --on-sun: #1b1a17;
   --merah: #c7281c;
   --hijau: #1f7a3d;
+  --on-accent: #fff;
   --muted: #6a6556;
+  --inverse-bg: #1b1a17;
+  --inverse-fg: #ffc61a;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #1a1915;
+    --paper-2: #24221c;
+    --card: #211f1a;
+    --field: #2c2a23;
+    --ink: #f1ead6;
+    --merah: #ff7466;
+    --hijau: #4cc37a;
+    --on-accent: #1a1915;
+    --muted: #b8b09a;
+    --inverse-bg: #ffc61a;
+    --inverse-fg: #1a1915;
+  }
 }
 * {
   box-sizing: border-box;
@@ -45,6 +68,7 @@ h1 {
 }
 .plus {
   background: var(--sun);
+  color: var(--on-sun);
   padding: 0 5px;
   border: 2px solid var(--ink);
 }
@@ -66,11 +90,15 @@ h2 {
   border: 3px solid var(--ink);
   box-shadow: 4px 4px 0 var(--ink);
   background: var(--sun);
-  color: var(--ink);
+  color: var(--on-sun);
 }
 .toggle.on {
   background: var(--hijau);
-  color: #fff;
+  color: var(--on-accent);
+}
+.toggle.error {
+  border-color: var(--merah);
+  box-shadow: 4px 4px 0 var(--merah);
 }
 .toggle:active {
   transform: translate(3px, 3px);
@@ -88,18 +116,28 @@ h2 {
 }
 .err {
   margin: 8px 0 0;
-  padding: 6px 8px;
+  padding: 8px 10px;
   border: 2px solid var(--merah);
   color: var(--merah);
-  background: #fff;
+  background: var(--field);
   font-weight: 600;
+}
+.err p {
+  margin: 0;
+}
+.err .adopt {
+  margin-top: 8px;
 }
 
 .panel {
   margin-top: 12px;
   padding: 10px;
   border: 2px solid var(--ink);
-  background: #fffaf0;
+  background: var(--card);
+  transition: opacity 0.2s;
+}
+.panel.stale {
+  opacity: 0.7;
 }
 .status {
   display: grid;
@@ -115,7 +153,7 @@ h2 {
 }
 dt {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
 }
 dd {
@@ -125,7 +163,7 @@ dd {
 }
 .muted {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 #s-age {
   margin: 6px 0 0;
@@ -138,9 +176,11 @@ dd {
 .field:last-child {
   margin-bottom: 0;
 }
-.field > span {
+.field > span,
+.seg legend {
   display: block;
-  font-size: 11px;
+  padding: 0;
+  font-size: 12px;
   font-weight: 700;
   margin-bottom: 3px;
 }
@@ -150,29 +190,52 @@ input[type='text'] {
   font: inherit;
   color: var(--ink);
   border: 2px solid var(--ink);
-  background: #fff;
+  background: var(--field);
   border-radius: 0;
 }
 .seg {
   display: flex;
+  flex-wrap: wrap;
+  margin: 0 0 8px;
+  padding: 0;
+  border: 0;
+  min-width: 0;
 }
-.seg button {
+.seg legend {
+  width: 100%;
+}
+.seg label {
   flex: 1;
-  padding: 6px 4px;
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-  border: 2px solid var(--ink);
-  background: #fff;
-  color: var(--ink);
   margin-left: -2px;
+  cursor: pointer;
 }
-.seg button:first-child {
+.seg label:first-of-type {
   margin-left: 0;
 }
-.seg button[aria-pressed='true'] {
-  background: var(--ink);
-  color: var(--sun);
+.seg input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+}
+.seg label span {
+  display: block;
+  padding: 6px 4px;
+  text-align: center;
+  font-weight: 700;
+  border: 2px solid var(--ink);
+  background: var(--field);
+  color: var(--ink);
+}
+.seg input:checked + span {
+  background: var(--inverse-bg);
+  color: var(--inverse-fg);
+}
+.seg input:focus-visible + span {
+  outline: 3px solid var(--merah);
+  outline-offset: 2px;
+  position: relative;
 }
 
 .logs {
@@ -182,12 +245,12 @@ input[type='text'] {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font:
-    11px/1.35 ui-monospace,
+    12px/1.4 ui-monospace,
     SFMono-Regular,
     Menlo,
     monospace;
   background: var(--paper-2);
-  padding: 6px;
+  padding: 8px;
 }
 footer {
   display: flex;
@@ -215,7 +278,7 @@ a {
 }
 .warn {
   margin-top: 8px;
-  padding: 8px;
+  padding: 8px 10px;
   border: 2px solid var(--merah);
   background: var(--paper-2);
   overflow-wrap: anywhere;
@@ -231,6 +294,26 @@ a {
   font-weight: 700;
   border: 2px solid var(--ink);
   background: var(--sun);
+  color: var(--on-sun);
+}
+.note {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 2px solid var(--ink);
+  background: var(--field);
+  overflow-wrap: anywhere;
+}
+.note p {
+  margin: 0 0 6px;
+}
+.link-btn {
+  padding: 2px 6px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  border: 0;
+  background: none;
   color: var(--ink);
 }
 [hidden] {

@@ -3,6 +3,7 @@
   "name": "Warga +62 Autoplay",
   "version": "0.0.0",
   "description": "Auto-play untuk Warga +62 khusus room privat dengan akun milik sendiri.",
+  "minimum_chrome_version": "114",
   "permissions": ["storage"],
   "host_permissions": ["https://mainwarga62.id/*"],
   "background": { "service_worker": "background.js", "type": "module" },

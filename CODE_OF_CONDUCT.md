@@ -31,4 +31,4 @@ Laporkan perilaku yang melanggar kode etik lewat [GitHub Issues](https://github.
 
 ## Atribusi
 
-Dadaptasi dari Contributor Covenant versi 2.1. Teks asli: https://www.contributor-covenant.org/version/2/1/code_of_conduct/
+Diadaptasi dari Contributor Covenant versi 2.1. Teks asli: <https://www.contributor-covenant.org/version/2/1/code_of_conduct/>

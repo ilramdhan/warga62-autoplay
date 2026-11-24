@@ -1,4 +1,13 @@
-import { nowMs, lobbyPresence, nameInElement, throttle, inviteModalBox } from './util.js';
+import {
+  closeDialog,
+  nowMs,
+  lobbyPresence,
+  nameInElement,
+  throttle,
+  inviteModalBox,
+  roomMaxPlayers,
+  selectInvitees,
+} from './util.js';
 
 const UNDANG = /^undang$/;
 const TERUNDANG = /^terundang$/;
@@ -9,20 +18,22 @@ const inviteBox = inviteModalBox;
 const CLOSE_TRIES = 3;
 
 /** Tutup modal: "Tutup" DI DALAM modal saja, lalu Escape bila gagal. true bila modal benar-benar hilang. */
-async function closeBox(ctx, box) {
-  if (!box) return !inviteBox(ctx.dom);
-  const close = ctx.dom.findButton('tutup', box, { enabledOnly: false });
-  if (close) {
-    ctx.act.click(close);
-    if (await ctx.act.waitFor(() => !inviteBox(ctx.dom), { timeout: 1500 })) return true;
-  }
-  ctx.act.pressKey(document.activeElement ?? document.body, 'keydown', 'Escape');
-  return !!(await ctx.act.waitFor(() => !inviteBox(ctx.dom), { timeout: 1000 }));
+function closeBox(ctx, box) {
+  if (!box) return Promise.resolve(!inviteBox(ctx.dom));
+  return closeDialog(ctx, {
+    box,
+    isOpen: () => inviteBox(ctx.dom),
+    anywhere: false,
+    enabledOnly: false,
+    waitMs: 1500,
+    escMs: 1000,
+  });
 }
 
 /**
  * Ruang tunggu (host): buka "Undang teman", TUNGGU daftar teman termuat (muncul async setelah modal
- * dibuka), lalu klik "Undang" hanya untuk akun cfg.accounts yang BELUM hadir, verifikasi jadi "Terundang".
+ * dibuka), lalu klik "Undang" hanya untuk akun cfg.roster (akun yang ikut main) yang BELUM hadir, verifikasi jadi
+ * "Terundang". Jumlah tamu tidak pernah melebihi Maks. pemain − 1 (lihat selectInvitees).
  * Diulang tiap inviteRetryMs selama masih ada akun yang belum masuk. Modal yang tertinggal terbuka ditutup.
  */
 export default {
@@ -34,17 +45,17 @@ export default {
     // Modal tertinggal terbuka (mis. ditutup gagal) menghalangi "Mulai main": tutup dulu (maks CLOSE_TRIES).
     if (inviteBox(ctx.dom)) return (ctx.memo.inviteCloseFails ?? 0) < CLOSE_TRIES ? { closeOnly: true } : null;
     ctx.memo.inviteCloseFails = 0;
-    const { missing } = lobbyPresence(ctx);
-    if (!missing.length) return null;
+    const { missing, count } = lobbyPresence(ctx);
+    if (!missing.length || count >= roomMaxPlayers(ctx.cfg)) return null;
     const last = ctx.memo.lastInviteAt ?? 0;
-    return !last || nowMs(ctx) - last >= ctx.cfg.timing.inviteRetryMs ? { missing } : null;
+    return !last || nowMs(ctx) - last >= ctx.cfg.timing.inviteRetryMs ? { missing, count } : null;
   },
   async run(ctx, detected) {
     if (detected.closeOnly) {
       if (!throttle(ctx, 'invite-close', 2000)) return false;
       if (await closeBox(ctx, inviteBox(ctx.dom))) {
         ctx.log.info('Menutup modal Undang teman.');
-        return true;
+        return false; // menutup modal bukan kemajuan (hanya klik Undang yang dihitung)
       }
       ctx.memo.inviteCloseFails = (ctx.memo.inviteCloseFails ?? 0) + 1;
       if (ctx.memo.inviteCloseFails >= CLOSE_TRIES) {
@@ -90,9 +101,15 @@ export default {
         const name = rowNameOf(btn);
         if (name) already.push(name);
       }
+      const { invite: allowed, skipped } = selectInvitees({
+        missing: wanted,
+        pending: already,
+        count: detected.count ?? lobbyPresence(ctx).count,
+        maxPlayers: roomMaxPlayers(ctx.cfg),
+      });
       for (const btn of findButtons(UNDANG, box)) {
         const name = rowNameOf(btn);
-        if (!name || invited.includes(name)) continue;
+        if (!name || invited.includes(name) || !allowed.includes(name)) continue;
         ctx.act.click(btn);
         // Satu klik cukup; konfirmasi "Terundang" datang dari server (~2–4 dtk). Jangan klik ganda.
         const ok = await ctx.act.waitFor(
@@ -103,7 +120,10 @@ export default {
         await ctx.act.sleep(300);
       }
 
-      const offline = wanted.filter((n) => !invited.some((x) => x.startsWith(n)) && !already.includes(n));
+      const offline = allowed.filter((n) => !invited.some((x) => x.startsWith(n)) && !already.includes(n));
+      if (skipped.length && throttle(ctx, 'invite-full', 60000)) {
+        ctx.log.warn(`Kursi room penuh (maks ${roomMaxPlayers(ctx.cfg)}), tidak mengundang: ${skipped.join(', ')}.`);
+      }
       if (invited.length) ctx.log.info(`Mengundang: ${invited.join(', ')}.`);
       if (already.length) ctx.log.info(`Sudah diundang, menunggu: ${already.join(', ')}.`);
       if (offline.length) {
@@ -111,7 +131,9 @@ export default {
         ctx.log.info(`Belum bisa diundang (${why}): ${offline.map(norm).join(', ')}.`);
       }
       if (!(await closeBox(ctx, box))) ctx.memo.inviteCloseFails = (ctx.memo.inviteCloseFails ?? 0) + 1;
-      return true;
+      // Hanya klik "Undang" yang dihitung aksi: membuka/menutup modal tanpa mengundang bukan kemajuan,
+      // jadi watchdog tetap berjalan (dan tenggat ruang tunggu di engine membatasi undangan ulang).
+      return invited.length > 0;
     }
   },
 };

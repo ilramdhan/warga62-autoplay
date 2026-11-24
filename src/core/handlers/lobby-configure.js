@@ -60,12 +60,12 @@ export default {
       await ctx.act.sleep(250);
     }
 
-    // Keamanan akses: tidak aman kalau Publik terpilih, atau akses yang diinginkan jelas tidak terpilih.
+    // Keamanan akses (fail closed): aman HANYA bila opsi yang diinginkan terlihat dan jelas terpilih,
+    // dan Publik tidak terpilih. Opsi tak ditemukan / status tak terbaca = tidak aman.
     const publik = optionByText('Publik');
     const wanted = optionByText(room.access === 'teman' ? 'Teman' : 'Privat');
     const publicOn = optionChecked(publik) === true;
-    const wantedOn = optionChecked(wanted) === true;
-    ctx.memo.accessUnsafe = publicOn || (wanted != null && !wantedOn);
+    ctx.memo.accessUnsafe = publicOn || wanted == null || optionChecked(wanted) !== true;
 
     // Tutup panel dengan "Selesai" (simpan), fallback "Tutup".
     const box = climb(anchor, (p) => findButton(/^(selesai|tutup)$/, p)) ?? document;

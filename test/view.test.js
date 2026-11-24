@@ -55,10 +55,11 @@ test('rentAt: provinsi penuh menggandakan sewa level 0, gadai = 0, multiplier ti
   assert.equal(buildView(g, 'a').rentAt(3), 1_200_000);
 });
 
-test('tileValue & netWorth (utang dikurangi)', () => {
+test('tileValue & netWorth (utang dikurangi, piutang ditambah)', () => {
   const v = buildView(baseGame(), 'a');
   assert.equal(v.tileValue(3), 500_000 + 2 * 250_000);
-  assert.equal(v.netWorth('a'), 5_000_000 + 500_000 * 3 + 500_000);
+  // a pemberi pinjaman ke b: piutang 1,25 jt ikut kekayaan bersih (aturan Ronde).
+  assert.equal(v.netWorth('a'), 5_000_000 + 500_000 * 3 + 500_000 + 1_250_000);
   // b: cash 2jt + DKI 1.8jt + 900rb + gadai (1.8jt * 0.4) - utang 1.25jt
   assert.equal(v.netWorth('b'), 2_000_000 + 2_700_000 + 1_800_000 * 0.4 - 1_250_000);
 });

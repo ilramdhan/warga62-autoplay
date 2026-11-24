@@ -45,6 +45,16 @@ export function inferDice(sum, observed) {
 }
 
 /**
+ * Petak asal bidak = tujuan − langkah (dengan wrap-around papan). Dihitung ulang dari label SAAT INI
+ * (tujuan dan langkah berubah bersama saat dadu diputar), jadi tidak bergantung pada memo lama.
+ * Murni, diekspor untuk tes. null bila input tidak valid.
+ */
+export function originFrom(dest, steps, size = BOARD_SIZE) {
+  if (!Number.isInteger(dest) || !Number.isInteger(steps) || !(size > 0)) return null;
+  return (((dest - steps) % size) + size) % size;
+}
+
+/**
  * Rencana policy (bisa untuk dadu 1 atau 2) diubah ke nilai baru DADU PERTAMA dengan total & status
  * kembar yang sama. null bila tidak setara. Murni, diekspor untuk tes.
  */
@@ -140,14 +150,12 @@ export default {
       }
     }
 
-    // Posisi asal = tujuan awal − total awal (state bisa sudah/ belum memindahkan bidak).
+    // Posisi asal = tujuan saat ini − langkah saat ini (state bisa sudah/belum memindahkan bidak).
     const dest = tileIndexFromText(
       labelOf(findButton(WALK, box) || findButton(USE, box)).replace(/^.*jalan ke /, ''),
       ALL_KINDS,
     );
-    const from =
-      dest != null && !touched ? (dest - sum0 + BOARD_SIZE) % BOARD_SIZE : (ctx.memo.jokiFrom ?? ctx.me?.position);
-    if (dest != null && !touched) ctx.memo.jokiFrom = from;
+    const from = originFrom(dest, stepsNow()) ?? ctx.me?.position;
     const view = ctx.view && Number.isFinite(from) ? { ...ctx.view, me: { ...ctx.view.me, position: from } } : ctx.view;
 
     const plan = ask({ ...ctx, view }, 'jokiDadu', null, { dice: values });

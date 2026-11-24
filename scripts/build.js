@@ -1,9 +1,8 @@
 // Build: bot.js (IIFE) + extension MV3 + zip. Jalankan: npm run build
 import { build } from 'esbuild';
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
+import { zipSync } from 'fflate';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -42,9 +41,20 @@ const common = { bundle: true, target: 'chrome114', minify: false, legalComments
 rmSync(DIST, { recursive: true, force: true });
 mkdirSync(EXT, { recursive: true });
 
-// 1. Bot untuk runner dan extension.
-await build({ ...common, entryPoints: [entryPage], outfile: join(DIST, 'bot.js'), format: 'iife' });
-cpSync(join(DIST, 'bot.js'), join(EXT, 'bot.js'));
+// 1. Bot untuk runner dan extension. Target ditanam saat build supaya halaman tidak bisa memalsukannya
+//    (lihat src/core/entry-page.js): runner membaca window.__W62_CONFIG__, extension hanya pesan bridge.
+for (const [target, outfile] of [
+  ['runner', join(DIST, 'bot.js')],
+  ['extension', join(EXT, 'bot.js')],
+]) {
+  await build({
+    ...common,
+    entryPoints: [entryPage],
+    outfile,
+    format: 'iife',
+    define: { __W62_TARGET__: JSON.stringify(target) },
+  });
+}
 
 // 2. Skrip extension.
 await build({
@@ -87,29 +97,21 @@ const manifest = JSON.parse(readFileSync(join(SRC, 'extension', 'manifest.json')
 manifest.version = version;
 writeFileSync(join(EXT, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
 
-// 5. Zip.
+// 5. Zip (deterministik): urutan file tetap, mtime tetap, tanpa atribut OS. Gagal = build gagal.
 const zipName = `warga62-autoplay-extension-v${version}.zip`;
 const zipPath = join(DIST, zipName);
-let zipped = false;
-try {
-  const require = createRequire(import.meta.url);
-  const paths = [ROOT, ...(process.env.NODE_PATH || '').split(':').filter(Boolean)];
-  const JSZip = require(require.resolve('jszip', { paths }));
-  const zip = new JSZip();
-  const { readdirSync, statSync } = await import('node:fs');
-  const walk = (dir, prefix) => {
-    for (const name of readdirSync(dir).sort()) {
-      const full = join(dir, name);
-      if (statSync(full).isDirectory()) walk(full, `${prefix}${name}/`);
-      else zip.file(`${prefix}${name}`, readFileSync(full));
-    }
-  };
-  walk(EXT, '');
-  writeFileSync(zipPath, await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }));
-  zipped = true;
-} catch (_e) {}
-if (!zipped) {
-  execFileSync('zip', ['-qr', zipPath, '.'], { cwd: EXT });
-}
+// Waktu lokal: fflate menulis DOS time dari getter lokal, jadi hasil sama di zona waktu mana pun.
+const ZIP_MTIME = new Date(1980, 0, 1, 0, 0, 0);
+const files = {};
+const walk = (dir, prefix) => {
+  for (const name of readdirSync(dir).sort()) {
+    const full = join(dir, name);
+    if (statSync(full).isDirectory()) walk(full, `${prefix}${name}/`);
+    else files[`${prefix}${name}`] = [new Uint8Array(readFileSync(full)), { mtime: ZIP_MTIME }];
+  }
+};
+walk(EXT, '');
+if (!files['manifest.json']) throw new Error('Zip gagal: manifest.json tidak ada di dist/extension.');
+writeFileSync(zipPath, zipSync(files, { level: 9 }));
 cpSync(zipPath, join(DIST, 'warga62-autoplay-extension.zip'));
-console.log(`Selesai: dist/bot.js, dist/extension/, dist/${zipName}`);
+console.log(`Selesai: dist/bot.js, dist/extension/, dist/${zipName} (${Object.keys(files).length} file)`);

@@ -25,6 +25,11 @@ export function tileIndexFromText(text, kinds = ['city']) {
   return null;
 }
 
+/** Nama petak dari data papan ("Makassar"), atau null bila indeks tidak dikenal. */
+export function tileName(tile) {
+  return Number.isInteger(tile) ? (TILES[tile]?.name ?? null) : null;
+}
+
 const KEEP_ALIASES = {
   'restu-ibu': ['restu ibu'],
   'orang-dalam': ['orang dalam'],
@@ -120,6 +125,29 @@ export function throttle(ctx, key, ms) {
 
 export const pause = (ctx) => ctx.act.pause(ctx.cfg?.timing?.actionDelayMs);
 
+/**
+ * Tutup dialog: klik "Tutup" di dalam `box` (opsional juga di seluruh halaman), lalu Escape bila
+ * `isOpen()` masih benar. Tanpa `isOpen` dianggap tertutup setelah mencoba.
+ * @param {object} ctx
+ * @param {{box?: Element|null, isOpen?: () => any, anywhere?: boolean, enabledOnly?: boolean, waitMs?: number, escMs?: number}} [opts]
+ * @returns {Promise<boolean>} true bila dialog tidak lagi terbuka.
+ */
+export async function closeDialog(ctx, opts = {}) {
+  const { box = null, anywhere = true, enabledOnly = true, waitMs = 1000, escMs = 800 } = opts;
+  const open = typeof opts.isOpen === 'function' ? opts.isOpen : () => false;
+  const { findButton } = ctx.dom;
+  const close =
+    (box || anywhere ? findButton('tutup', box ?? document, { enabledOnly }) : null) ||
+    (anywhere && box ? findButton('tutup', document, { enabledOnly }) : null);
+  if (close) {
+    ctx.act.click(close);
+    if (await ctx.act.waitFor(() => !open(), { timeout: waitMs })) return true;
+  }
+  const target = typeof document !== 'undefined' ? (document.activeElement ?? document.body) : null;
+  if (target) ctx.act.pressKey(target, 'keydown', 'Escape');
+  return !!(await ctx.act.waitFor(() => !open(), { timeout: escMs }));
+}
+
 /** Panggil fungsi policy(view, ...args); undefined/gagal -> fallback (nilai atau fungsi). */
 export function ask(ctx, fnName, fallback, ...args) {
   try {
@@ -176,10 +204,36 @@ export function rowOfButton(ctx, btn, sameKind) {
   return row;
 }
 
-/** Nama akun lain (selain saya) dari cfg.accounts. */
+/**
+ * Akun lain (selain saya) yang ikut main sesi ini: cfg.roster (fallback cfg.accounts untuk config lama).
+ * Hanya roster yang diundang/ditunggu host; cfg.accounts (akun dikenal) hanya whitelist pengaman.
+ */
 export function otherAccounts(cfg) {
   const me = norm(cfg.myName);
-  return (cfg.accounts ?? []).filter((n) => norm(n) !== me);
+  const list = Array.isArray(cfg.roster) ? cfg.roster : (cfg.accounts ?? []);
+  return list.filter((n) => norm(n) !== me);
+}
+
+/** Maks. pemain room yang diterapkan host (roomPreset dari planner menimpa cfg.room). */
+export function roomMaxPlayers(cfg) {
+  const n = cfg?.roomPreset?.maxPlayers ?? cfg?.room?.maxPlayers;
+  return Number.isFinite(n) && n >= 2 ? n : 4;
+}
+
+/**
+ * Pilih akun yang boleh diundang sekarang (murni). Hanya akun roster yang belum hadir dan belum
+ * berstatus "Terundang"; total tamu (hadir + menunggu + undangan baru) tidak pernah melebihi maxPlayers − 1.
+ * @param {{missing: string[], pending?: string[], count?: number, maxPlayers: number}} p
+ *   missing = akun roster yang belum hadir, pending = yang sudah "Terundang", count = pemain di room (termasuk saya)
+ * @returns {{invite: string[], skipped: string[]}}
+ */
+export function selectInvitees({ missing = [], pending = [], count = 1, maxPlayers = 4 }) {
+  const isPending = (n) => pending.some((p) => norm(p) === norm(n));
+  const waiting = missing.filter(isPending).length;
+  const guestsNow = Math.max(0, (Number.isFinite(count) ? count : 1) - 1);
+  const free = Math.max(0, maxPlayers - 1 - guestsNow - waiting);
+  const fresh = missing.filter((n) => !isPending(n));
+  return { invite: fresh.slice(0, free), skipped: fresh.slice(free) };
 }
 
 const NAME_CHAR = '[\\p{L}\\p{N}\\p{M}._-]';
@@ -313,12 +367,14 @@ function lobbyTexts(dom, skip) {
  * dialog lain, dan panel chat (dulu memakai teks body sehingga nama di daftar undangan dianggap hadir).
  * Pengaman: nama saya sendiri pasti ada di daftar pemain; kalau tidak terbaca, pengecualian chat
  * kemungkinan ikut menelan daftar pemain, jadi dihitung ulang tanpa pengecualian chat.
- * Hasil di-cache 300 ms di ctx.memo.
+ * Hasil di-cache PRESENCE_CACHE_MS di ctx.memo (lebih lama dari satu tick agar tidak memindai DOM tiap tick).
  */
+export const PRESENCE_CACHE_MS = 1500;
+
 export function lobbyPresence(ctx) {
   const cache = (ctx.memo.__presence ??= { t: -Infinity, v: null });
   const now = nowMs(ctx);
-  if (cache.v && now - cache.t <= 300) return cache.v;
+  if (cache.v && now - cache.t <= PRESENCE_CACHE_MS) return cache.v;
   const { dom } = ctx;
   const invite = inviteModalBox(dom);
   let texts = lobbyTexts(dom, [invite, chatBox(dom)]);

@@ -4,9 +4,8 @@ on:
   push:
     branches: [main]
 
-permissions:
-  contents: write
-  pull-requests: write
+# Default tanpa izin; tiap job meminta izin minimum yang dibutuhkannya.
+permissions: {}
 
 concurrency:
   group: release-${{ github.ref }}
@@ -15,33 +14,63 @@ concurrency:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       # Membuat/menyegarkan "release PR" (bump versi + CHANGELOG) dari commit Conventional.
       # Saat PR itu di-merge, release-please membuat tag + GitHub Release.
-      - uses: googleapis/release-please-action@v4
+      - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
         id: release
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Hanya saat sebuah release benar-benar dibuat: build lalu lampirkan zip extension.
-      - uses: actions/checkout@v4
-        if: ${{ steps.release.outputs.release_created }}
-
-      - uses: actions/setup-node@v4
-        if: ${{ steps.release.outputs.release_created }}
+  # Hanya saat sebuah release benar-benar dibuat: build (read-only) lalu lampirkan zip extension.
+  build:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          node-version: 22
+          ref: ${{ needs.release-please.outputs.tag_name }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
 
       - name: Install dependencies
-        if: ${{ steps.release.outputs.release_created }}
-        run: npm install --no-audit --no-fund
+        run: npm ci
 
-      - name: Build
-        if: ${{ steps.release.outputs.release_created }}
-        run: npm run build
+      - name: Check (lint, format, test, build, validate)
+        run: npm run check
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-zip
+          path: dist/warga62-autoplay-extension-v*.zip
+          if-no-files-found: error
+          retention-days: 1
+
+  upload:
+    needs: [release-please, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-zip
+          path: release-zip
 
       - name: Lampirkan zip extension ke release
-        if: ${{ steps.release.outputs.release_created }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{ steps.release.outputs.tag_name }} dist/warga62-autoplay-extension-v*.zip --clobber
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
+        run: gh release upload "$TAG_NAME" release-zip/warga62-autoplay-extension-v*.zip --clobber --repo "$GITHUB_REPOSITORY"
