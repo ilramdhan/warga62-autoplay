@@ -6,7 +6,7 @@ Runner membuka satu browser Chromium terpisah untuk tiap akun (profil sendiri-se
 
 ## 1. Persiapan (sekali saja)
 
-1. Pasang Node.js 20 atau lebih baru. Di macOS: `brew install node` (atau unduh dari nodejs.org). Cek dengan `node -v`.
+1. Pasang Node.js 22.13 atau lebih baru. Di macOS: `brew install node` (atau unduh dari nodejs.org). Cek dengan `node -v`.
 2. Di folder proyek:
 
    ```bash
@@ -42,7 +42,7 @@ npm run runner -- doctor
 npm run runner -- run --config runner.config.json
 ```
 
-Tambahkan `--headful` untuk melihat jendela browser. Tekan `Ctrl+C` untuk berhenti dengan rapi.
+Tambahkan `--headful` untuk melihat jendela browser. Tekan `Ctrl+C` untuk berhenti dengan rapi. Dalam mode `--headful`, menutup jendela sebuah akun menghentikan akun itu saja (tidak dibuka ulang).
 
 Runner menjalankan guest lebih dulu, host terakhir (jeda 2 detik). Log tiap akun tampil di terminal dengan warna berbeda. Jika halaman crash atau tertutup, runner membuka ulang; jika gagal membuka situs, ia mencoba lagi dengan jeda yang makin lama; jika tidak ada event lebih dari `timing.watchdogMs`, halaman dimuat ulang ke `/`.
 

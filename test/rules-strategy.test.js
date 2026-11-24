@@ -266,3 +266,50 @@ test('still-here: klik konfirmasi, tidak pernah klik tombol keluar', async () =>
   // Hanya tombol keluar/tolak -> tidak ada yang diklik.
   assert.equal(stillHere.detect(stillHereCtx(['Keluar', 'Nggak ikut', 'Tinggalkan room']).ctx), null);
 });
+
+// ---------- gadai kota lepas untuk melengkapi provinsi ----------
+test('preRoll: gadai kota lepas supaya kas cukup membeli kota terakhir provinsi', () => {
+  const cfg = { ...ARENA, policyFlags: { reserveOverride: 2_000_000 } };
+  const mk = ({ cash = 200_000, position = 45, extra = {} } = {}) => ({
+    round: 5,
+    settings: { difficulty: 'medium' },
+    players: {
+      me: { id: 'me', name: 'A', cash, position },
+      op: { id: 'op', name: 'B', cash: 5e6, position: 20 },
+    },
+    // Aceh 1,2 milik kita, 3 kosong (6 petak dari 45). Bogor (41) lepas: Depok milik lawan.
+    properties: { 1: { owner: 'me' }, 2: { owner: 'me' }, 41: { owner: 'me' }, 42: { owner: 'op' }, ...extra },
+  });
+  const mortgages = (g, c = cfg) =>
+    createPolicy(c)
+      .preRoll(buildView(g, 'me', c))
+      .filter((a) => a.type === 'mortgage')
+      .map((a) => a.tile);
+  assert.deepEqual(mortgages(mk()), [41]);
+  // Kota ketiga sudah dimiliki lawan / Negara: tidak ada yang perlu disiapkan.
+  assert.deepEqual(mortgages(mk({ extra: { 3: { owner: 'op' } } })), []);
+  assert.deepEqual(mortgages(mk({ extra: { 3: { owner: 'state' } } })), []);
+  // Jauh (tak terjangkau giliran ini) atau peluangnya kecil (2 petak).
+  assert.deepEqual(mortgages(mk({ position: 20 })), []);
+  assert.deepEqual(mortgages(mk({ position: 1 })), []);
+  // Kas (plus gaji lewat START) sudah cukup.
+  assert.deepEqual(mortgages(mk({ cash: 2_000_000 })), []);
+  // Kota di provinsi lengkap milik kita & kota di provinsi yang masih terbuka tidak pernah digadai.
+  const full = { 5: { owner: 'me' }, 6: { owner: 'me' }, 7: { owner: 'me' }, 9: { owner: 'me' } };
+  const noLone = mk();
+  delete noLone.properties[41];
+  delete noLone.properties[42];
+  Object.assign(noLone.properties, full);
+  assert.deepEqual(mortgages(noLone), []);
+  assert.deepEqual(mortgages(mk({ extra: full })), [41]);
+  // Kota lepas berbangunan tidak bisa digadai.
+  assert.deepEqual(mortgages(mk({ extra: { 41: { owner: 'me', level: 1 } } })), []);
+  // Setelah gadai, membeli kota terakhir lolos dengan sisa kas yang lebih tipis.
+  const after = mk({ cash: 1_250_000, position: 3, extra: { 41: { owner: 'me', mortgaged: true } } });
+  assert.equal(createPolicy(cfg).shouldBuy(buildView(after, 'me', cfg), { tile: 3, price: 500_000 }), true);
+  // Pemenang grind memakai langkah yang sama.
+  const gcfg = { ...GRIND, policyFlags: { reserveOverride: 2_000_000 } };
+  const gw = mk();
+  gw.players.me.name = 'JULE';
+  assert.deepEqual(mortgages(gw, gcfg), [41]);
+});

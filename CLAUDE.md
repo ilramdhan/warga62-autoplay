@@ -1,6 +1,6 @@
 # CLAUDE.md — konteks proyek untuk AI & kontributor
 
-Bot auto-play untuk **Warga +62** (game monopoli Indonesia, https://mainwarga62.id) yang dipakai **hanya** dengan akun milik sendiri di room Privat/Teman. Ada dua cara menjalankan bot dengan kode inti yang sama:
+Bot auto-play untuk **Warga +62** (game monopoli Indonesia, <https://mainwarga62.id>) yang dipakai **hanya** dengan akun milik sendiri di room Privat/Teman. Ada dua cara menjalankan bot dengan kode inti yang sama:
 
 - **Chrome extension (MV3)**: `src/extension/` → `dist/extension/` (Load unpacked).
 - **Playwright runner**: `src/runner/cli.js`, menjalankan banyak akun sekaligus di latar belakang (headless).

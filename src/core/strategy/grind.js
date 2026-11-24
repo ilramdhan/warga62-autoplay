@@ -6,7 +6,7 @@
  */
 import { PROVINCES, TILES, provinceOf } from '../data/board.js';
 import { dueSoonDebt, parseRupiahText, recommendedReserve, visitProbabilities } from './risk.js';
-import { createSmartPolicy } from './smart.js';
+import { COMPLETE_BUY_RESERVE, completionMortgage, createSmartPolicy, provinceStatus } from './smart.js';
 
 const num = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 const norm = (s) =>
@@ -263,6 +263,13 @@ export function createGrindPolicy(cfg = {}) {
           cash -= debt;
         }
       }
+      // Siapkan kas untuk melengkapi provinsi (gadai kota lepas, sama seperti smart).
+      const prep = completionMortgage(view, { cash, reserve, target: winnerTarget() });
+      if (prep?.tile != null) {
+        actions.push({ type: 'mortgage', tile: prep.tile });
+        cash += Math.round(PROVINCES[provinceOf(prep.tile)].price * num(view.rules.mortgage, view.difficulty.mortgage));
+      }
+      const hold = prep?.hold ?? 0;
       // Tebus: provinsi lengkap dulu (sewa 2× & bisa dibangun), lalu sewa tertinggi.
       const ratio = num(view.rules.redeem, view.difficulty.redeem);
       view.myTiles
@@ -274,7 +281,7 @@ export function createGrindPolicy(cfg = {}) {
         }))
         .sort((a, b) => b.prio - a.prio || a.t - b.t)
         .forEach(({ t, cost }) => {
-          if (cash - cost >= reserve) {
+          if (cash - cost >= Math.max(reserve, hold)) {
             actions.push({ type: 'redeem', tile: t });
             cash -= cost;
           }
@@ -286,8 +293,11 @@ export function createGrindPolicy(cfg = {}) {
       if (!prov) return why('bukan kota', false);
       const cost = num(price, PROVINCES[prov].price);
       const want = Array.isArray(wf.wantProvinces) && wf.wantProvinces.includes(prov);
-      const ok = view.me.cash - cost >= (want ? 0 : winnerReserve(view));
-      return why(ok ? 'pemenang: beli' : 'pemenang: kas kurang', ok);
+      const st = provinceStatus(view, tile, view.meId);
+      const completes = Object.keys(st.others).length === 0 && st.mine === st.size - 1;
+      const keep = want ? 0 : winnerReserve(view) * (completes ? COMPLETE_BUY_RESERVE : 1);
+      const ok = view.me.cash >= cost && view.me.cash - cost >= keep;
+      return why(ok ? `pemenang: beli${completes ? ' (melengkapi provinsi)' : ''}` : 'pemenang: kas kurang', ok);
     },
     shouldTakeover: (view, { tile, price } = {}) => {
       if (!provinceOf(tile) || view.isTakeoverSafe(tile)) return why('pemenang: target aman/bukan kota', false);

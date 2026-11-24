@@ -138,8 +138,9 @@ async function superviseAccount(pw, account, idx, base, headless, botSource) {
   const tag = (m) => console.log(`${paint(idx, `[${account}]`)} ${m}`);
   const guard = (code) => `if (location.origin === ${JSON.stringify(SITE)}) {\n${code}\n}`;
   let attempt = 0;
+  let userClosed = false;
 
-  while (!shuttingDown) {
+  while (!shuttingDown && !userClosed) {
     let ctx;
     let lastEvent = Date.now();
     let restart;
@@ -160,10 +161,16 @@ async function superviseAccount(pw, account, idx, base, headless, botSource) {
       });
       await ctx.addInitScript({ content: guard(`window.__W62_CONFIG__ = ${JSON.stringify(cfg)};`) });
       await ctx.addInitScript({ content: guard(botSource) });
-      ctx.on('close', () => restart('context ditutup'));
+      // Headful: jendela/halaman yang ditutup pengguna berarti "hentikan akun ini", bukan crash.
+      // Headless tidak punya jendela, jadi penutupan di sana tetap dianggap gangguan dan di-restart.
+      const closedByUser = (why) => {
+        if (!headless) userClosed = true;
+        restart(why);
+      };
+      ctx.on('close', () => closedByUser('context ditutup'));
       const page = ctx.pages()[0] || (await ctx.newPage());
       page.on('crash', () => restart('halaman crash'));
-      page.on('close', () => restart('halaman ditutup'));
+      page.on('close', () => closedByUser('halaman ditutup'));
 
       for (let n = 0; !shuttingDown; n++) {
         try {
@@ -187,14 +194,15 @@ async function superviseAccount(pw, account, idx, base, headless, botSource) {
       }, 60000);
       const reason = await needRestart;
       clearInterval(timer);
-      if (!shuttingDown) tag(`Restart: ${reason}.`);
+      if (userClosed) tag(`Jendela ditutup pengguna (${reason}); akun ini berhenti.`);
+      else if (!shuttingDown) tag(`Restart: ${reason}.`);
     } catch (e) {
       tag(`Error: ${e.message.split('\n')[0]}`);
     } finally {
       unsubscribe();
       if (ctx) await ctx.close().catch(() => {});
     }
-    if (shuttingDown) break;
+    if (shuttingDown || userClosed) break;
     attempt++;
     await sleep(Math.min(60000, 2000 * 2 ** Math.min(attempt, 5)));
   }
@@ -249,8 +257,8 @@ async function cmdDoctor(args) {
     if (!pass) ok = false;
     console.log(`${pass ? '[OK]  ' : '[GAGAL]'} ${msg}`);
   };
-  const major = Number(process.versions.node.split('.')[0]);
-  line(major >= 20, `Node ${process.versions.node} (butuh >= 20)`);
+  const [major, minor] = process.versions.node.split('.').map(Number);
+  line(major > 22 || (major === 22 && minor >= 13), `Node ${process.versions.node} (butuh >= 22.13)`);
   try {
     await loadPlaywright();
     line(true, 'Playwright terpasang');

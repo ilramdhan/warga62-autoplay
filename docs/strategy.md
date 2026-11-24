@@ -81,8 +81,10 @@ minta pinjaman, lalu Pinjol sebelum bangkrut. Kalau pemenang tidak ada di meja, 
 cadangan kecil; kota tergadai tidak dibangun), ambil alih kota yang tidak aman, tidak pernah membayar permintaan uang
 feeder, meminjamkan ke feeder hanya bila flag meminta (0% saat menahan bangkrut, atau bunga tetap untuk pencapaian
 Koperasi). Sebelum lempar: bayar jaminan, lunasi utang mahal/hampir jatuh tempo (aturan sama dengan smart), lalu
-tebus gadai dengan urutan provinsi lengkap dulu. Gali Lubang: kalau flag `wantPinjol` → Pinjol; selain itu memakai
-`debtStep` smart (kerugian per rupiah terkecil), jadi kota lepas digadai sebelum bangunan provinsi lengkap dijual.
+gadai kota lepas untuk melengkapi provinsi (sama dengan smart, lihat Mode arena), lalu tebus gadai dengan urutan
+provinsi lengkap dulu. Pembelian yang melengkapi provinsi cukup menyisakan 35% cadangan. Gali Lubang: kalau flag
+`wantPinjol` → Pinjol; selain itu memakai `debtStep` smart (kerugian per rupiah terkecil), jadi kota lepas digadai
+sebelum bangunan provinsi lengkap dijual.
 
 Feeder menawarkan pinjaman 0% kalau peminjamnya pemenang (jumlah harus diketahui dan sisa kas feeder ≥ ekspektasi
 pengeluaran 1 giliran); ke pemain lain tidak meminjamkan. Pemenang meminjamkan ke feeder hanya kalau sisa kas ≥ 1,5×
@@ -97,7 +99,7 @@ Setiap akun main sendiri untuk menang, tanpa kerja sama.
   (dan game tidak mengirim pengali sewa aktual), ditambah utang yang jatuh tempo ≤ 2 giliran. Semua dari tabel
   tingkat (Santai/Normal/Inflasi/Krismon). Implementasinya `policyReserve` di `risk.js`.
 - **Beli**: harga tanah tetap dihitung di kekayaan bersih, jadi biaya sebenarnya likuiditas + Pajak Tahunan (dihitung
-  per properti). Syarat sisa kas: **melengkapi provinsi** 40% cadangan, **menggagalkan provinsi lawan** 70%,
+  per properti). Syarat sisa kas: **melengkapi provinsi** 35% cadangan, **menggagalkan provinsi lawan** 70%,
   provinsi yang masih bisa kita lengkapi = cadangan + **dana bangun**, kota di provinsi yang sudah dimiliki lawan =
   1,5× cadangan + dana bangun. Dana bangun = biaya satu putaran bangun di provinsi lengkap kita (atau setengah
   biaya bangun kalau belum punya provinsi lengkap). Tanpa dana ini kas habis untuk tanah dan bot tidak pernah bisa
@@ -133,7 +135,17 @@ Setiap akun main sendiri untuk menang, tanpa kerja sama.
   mahal (Pinjol atau bunga ≥ 25%) atau jatuh tempo ≤ 1 giliran. Kalau rincian pinjaman tidak diketahui, hanya
   kalau kas − utang ≥ 1,5× cadangan.
 - **Tebus gadai**: kota di provinsi lengkap kalau kas sisa ≥ 1,5× cadangan; kota lain baru kalau ≥ 2,5× cadangan
-  (tebus lebih mahal dari hasil gadai). Tidak menebus di ronde terakhir.
+  (tebus lebih mahal dari hasil gadai). Tidak menebus di ronde terakhir, dan tidak memakai kas yang sedang
+  disiapkan untuk melengkapi provinsi (lihat poin berikut).
+- **Gadai untuk melengkapi provinsi** (`completionMortgage`, `preRoll` → `{type:'mortgage'}`, tombol `Gadai kota`):
+  gadai hanya bisa lewat dok sebelum kocok, sedangkan modal beli muncul setelah mendarat (dok sudah hilang, modal
+  beli tidak punya jalur gadai), jadi kas disiapkan di depan. Syarat: kita punya 2 dari 3 kota sebuah provinsi, kota
+  ketiganya belum dimiliki siapa pun (bukan Negara), peluang mendarat di sana giliran ini ≥ 8% (`visitProbabilities`
+  dengan `rollTarget`), tidak di Lapas, bukan ronde terakhir, dan kas (+ gaji kalau lewat START) < harga + 50%
+  cadangan. Yang digadai: kota "lepas" (tanpa bangunan, satu-satunya milik kita di provinsi yang sudah dimiliki
+  pemain lain/Negara), sewa terendah dulu, satu per panggilan `preRoll`, dan hanya kalau total nilai gadai kota lepas
+  menutup kekurangan. Kota di provinsi lengkap, provinsi yang masih terbuka, atau set 2-dari-3 tidak pernah digadai.
+  Pemenang grind memakai langkah yang sama (feeder tidak).
 - **Meminjamkan** (`assessLoan` + `loanDefaultProbability` di `risk.js`): tolak kalau peminjam tidak dikenal,
   bangkrut, atau masih punya utang lain; jumlah pinjaman tidak diketahui; kita sendiri berutang; sisa ronde
   ≤ tempo pinjaman + 1; kas − jumlah < 1,5× cadangan; jumlah > 25% kas di atas cadangan; atau peminjam lebih kaya.
@@ -202,12 +214,6 @@ Dokumentasi tiap flag ada di `ACHIEVEMENT_FLAGS` (`src/core/strategy/index.js`).
 `holdBankruptUntilRound`/`minRounds`, `wantPinjol`, `wantJail`, `wantBail`, `wantElit`, `wantTakeover`,
 `wantProvinces`, `maxBuild`, `neverNegative`, `reserveOverride`, `lendInterest`, `preferPlayerLoan`,
 `feederBuyForTakeover`, `payStateWhenChoice`, `useAllKeepCards`, `useKeepCards`, `preferParking`.
-
-## TODO
-
-- **Gadai untuk melengkapi provinsi**: saat kas kurang untuk membeli/mengambil alih kota terakhir sebuah provinsi,
-  menggadai kota lepas (di provinsi yang tidak mungkin lengkap) bisa sepadan. Butuh perubahan kontrak handler
-  (aksi gadai di tengah modal beli/ambil alih, lalu kembali ke keputusan beli), jadi belum diimplementasikan.
 
 ## Asumsi terhadap modul lain (handler/engine)
 

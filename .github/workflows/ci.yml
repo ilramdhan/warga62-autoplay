@@ -44,9 +44,7 @@ jobs:
       - name: Validate manifest
         run: npm run validate
 
-      # Masih ada temuan markdownlint lama di beberapa dokumen; jangan gagalkan CI sampai dirapikan.
       - name: Markdown lint
-        continue-on-error: true
         run: npm run lint:md
 
       - name: Upload extension artifact

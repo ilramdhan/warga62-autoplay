@@ -6,12 +6,12 @@ Extension ini menjalankan bot langsung di tab `https://mainwarga62.id` pada Chro
 
 ## 1. Dapatkan extension
 
-**Opsi A: dari file zip** (paling mudah)
+### Opsi A: dari file zip (paling mudah)
 
 1. Unduh `warga62-autoplay-extension-v<versi>.zip` dari halaman Releases di GitHub, atau buat sendiri dengan `npm run build` (hasilnya ada di folder `dist/`).
 2. Ekstrak zip ke sebuah folder tetap, misalnya `~/warga62-extension`. Jangan hapus folder ini setelah dipasang.
 
-**Opsi B: build dari sumber**
+### Opsi B: build dari sumber
 
 ```bash
 npm ci

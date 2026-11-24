@@ -50,6 +50,63 @@ export function provinceStatus(view, tile, pid) {
   return { prov, tiles, owners, mine, unowned, others, maxOther, size: tiles.length };
 }
 
+/** Sisa kas minimal (× cadangan) setelah membeli kota yang melengkapi provinsi. */
+export const COMPLETE_BUY_RESERVE = 0.35;
+/** Target sisa kas (× cadangan) saat menyiapkan kas lewat gadai; sedikit di atas syarat beli karena cadangan
+ *  dihitung ulang dari posisi baru setelah melangkah. */
+export const COMPLETE_PLAN_RESERVE = 0.5;
+/** Peluang minimal mendarat di kota terakhir provinsi giliran ini supaya layak menggadai kota lain. */
+export const COMPLETE_MIN_ODDS = 0.08;
+
+/**
+ * Persiapan kas untuk melengkapi provinsi (dipakai preRoll smart & pemenang grind). Gadai hanya bisa lewat dok
+ * sebelum kocok, sedangkan keputusan beli datang setelah mendarat (dok sudah hilang), jadi kas disiapkan di depan.
+ *
+ * Target: provinsi yang kita punya 2 dari 3 kotanya, kota ketiganya belum dimiliki siapa pun (bukan Negara), dan
+ * peluang mendarat di sana giliran ini ≥ `minOdds`. Kas yang dibutuhkan = harga + cadangan × `floor`; gaji ikut
+ * dihitung kalau jalannya melewati START. Kalau kurang, gadai kota "lepas": kota tanpa bangunan, satu-satunya
+ * milik kita di provinsi yang sudah dimiliki pemain lain/Negara (tidak mungkin lengkap tanpa ambil alih). Hanya
+ * kalau total nilai gadai kota lepas menutup kekurangan; yang digadai = sewa terendah (satu per panggilan).
+ *
+ * @returns {{tile:number|null, target:number, odds:number, hold:number}|null} `hold` = kas yang perlu ditahan
+ *   sekarang untuk target ini (dipakai agar tebus gadai tidak memakai kas yang sedang disiapkan); null = tidak ada target.
+ */
+export function completionMortgage(
+  view,
+  { cash, reserve = 0, target = 'perfect', minOdds = COMPLETE_MIN_ODDS, floor = COMPLETE_PLAN_RESERVE } = {},
+) {
+  const p = view?.me;
+  if (!p || p.inJail || !Array.isArray(view.properties)) return null;
+  const pid = view.meId;
+  const money = num(cash, num(p.cash));
+  const visits = visitProbabilities(p.position, 1, target);
+  let best = null;
+  for (const prov of Object.keys(PROVINCES)) {
+    const st = provinceStatus(view, PROVINCES[prov].tiles[0], pid);
+    if (st.mine !== st.size - 1 || st.unowned !== 1) continue;
+    const tile = st.tiles.find((t) => !st.owners[st.tiles.indexOf(t)]);
+    const odds = num(visits[tile]);
+    if (odds >= minOdds && (!best || odds > best.odds)) best = { tile, odds, price: PROVINCES[prov].price };
+  }
+  if (!best) return null;
+  const salary = best.tile < p.position ? num(p.salary, num(view.difficulty?.salary)) : 0;
+  const hold = Math.max(0, best.price + reserve * floor - salary);
+  const out = { tile: null, target: best.tile, odds: best.odds, hold };
+  const gap = hold - money;
+  if (gap <= 0) return out;
+  const ratio = num(view.rules?.mortgage, num(view.difficulty?.mortgage, 0.5));
+  const lone = view.myTiles
+    .filter((t) => {
+      const prop = view.properties[t];
+      const st = provinceStatus(view, t, pid);
+      return st && !prop.mortgaged && prop.level === 0 && st.mine === 1 && Object.keys(st.others).length > 0;
+    })
+    .map((t) => ({ t, raise: Math.round(PROVINCES[provinceOf(t)].price * ratio), rent: view.rentAt(t, 0, pid) }));
+  if (lone.reduce((s, x) => s + x.raise, 0) < gap) return out;
+  lone.sort((a, b) => a.rent - b.rent || a.t - b.t);
+  return { ...out, tile: lone[0].t };
+}
+
 /** Ekspektasi kunjungan lawan ke petak dalam `turns` giliran (jumlah atas semua lawan). */
 function opponentVisits(view, tile, ownerId, turns, target = 'biasa') {
   let total = 0;
@@ -289,6 +346,17 @@ export function createSmartPolicy(cfg = {}) {
         why(`lunasi utang ${debt}: ${dueSoon ? 'hampir jatuh tempo' : 'bunga tinggi'}`, null);
       }
     }
+    // Siapkan kas untuk melengkapi provinsi: gadai kota lepas kalau kota terakhir provinsi mungkin didarati.
+    const prep = finalRound(view) ? null : completionMortgage(view, { cash, reserve, target: targetOf(view) });
+    if (prep?.tile != null) {
+      actions.push({ type: 'mortgage', tile: prep.tile });
+      cash += Math.round(PROVINCES[provinceOf(prep.tile)].price * num(view.rules.mortgage, view.difficulty.mortgage));
+      why(
+        `gadai ${prep.tile}: siapkan kas melengkapi provinsi (peluang ke ${prep.target} ${pctText(prep.odds)})`,
+        null,
+      );
+    }
+    const hold = prep?.hold ?? 0;
     if (!finalRound(view)) {
       const mortgaged = view.myTiles.filter((t) => view.properties[t].mortgaged);
       const ratio = num(view.rules.redeem, view.difficulty.redeem);
@@ -303,7 +371,8 @@ export function createSmartPolicy(cfg = {}) {
           // Tebus = bayar lebih mahal dari hasil gadai; hanya sepadan untuk provinsi lengkap (sewa 2× & bisa
           // dibangun) atau kalau kas benar-benar berlebih.
           const full = view.ownsProvince(p.id, provinceOf(t));
-          if (cash - cost >= reserve * (full ? 1.5 : 2.5)) {
+          // Jangan tebus dengan kas yang sedang disiapkan untuk melengkapi provinsi.
+          if (cash - cost >= Math.max(reserve * (full ? 1.5 : 2.5), hold)) {
             actions.push({ type: 'redeem', tile: t });
             cash -= cost;
           }
@@ -345,7 +414,9 @@ export function createSmartPolicy(cfg = {}) {
     const open = !othersHere;
     const fund = buildFund(view);
     let needed;
-    if (completes) needed = reserve * 0.4;
+    // Melengkapi provinsi: sewa 2× & bisa dibangun, sisa kas boleh lebih tipis (kas bisa disiapkan dengan gadai
+    // kota lepas di preRoll, lihat completionMortgage).
+    if (completes) needed = reserve * COMPLETE_BUY_RESERVE;
     else if (denial) needed = reserve * 0.7;
     else if (open) needed = reserve + fund;
     else needed = reserve * 1.5 + fund; // kota "nyasar" di provinsi milik bersama: hanya kalau kas longgar
