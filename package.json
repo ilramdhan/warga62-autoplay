@@ -11,7 +11,7 @@
     "url": "https://github.com/ilramdhan/warga62-autoplay.git"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13"
   },
   "bin": {
     "warga62-runner": "src/runner/cli.js"
@@ -24,6 +24,7 @@
     "format:check": "prettier --check .",
     "lint:md": "markdownlint-cli2 \"**/*.md\" \"#node_modules\" \"#dist\"",
     "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage",
     "validate": "node scripts/validate-manifest.js",
     "check": "npm run lint && npm run format:check && npm test && npm run build && npm run validate",
     "screenshots": "node scripts/screenshots.js",
@@ -32,6 +33,7 @@
   "devDependencies": {
     "esbuild": "^0.28.0",
     "eslint": "^10.1.0",
+    "fflate": "^0.8.3",
     "markdownlint-cli2": "^0.24.0",
     "prettier": "^3.8.0"
   },

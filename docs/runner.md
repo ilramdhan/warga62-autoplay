@@ -31,6 +31,8 @@ npm run runner -- login --account ilramdhan.dev
 
 Jendela Chromium terbuka. Login seperti biasa, pastikan kamu sudah masuk, lalu tutup jendelanya. Sesi tersimpan di `.runner-profiles/<nick>`.
 
+Jendela login sengaja dibuka sebagai Chromium biasa, **tidak** dikendalikan Playwright, karena Google dan Discord menolak login dari browser yang sedang diotomasi ("browser ini mungkin tidak aman"). Otomasi baru dipakai saat `run`, memakai cookie dari profil yang sama.
+
 > **Folder `.runner-profiles/` berisi cookie login akunmu.** Jaga tetap privat: jangan di-commit, di-zip, atau dibagikan. Folder ini sudah ada di `.gitignore`.
 
 ## 3. Jalankan
@@ -48,19 +50,20 @@ Runner menjalankan guest lebih dulu, host terakhir (jeda 2 detik). Log tiap akun
 
 Bentuknya sama dengan konfigurasi extension, ditambah:
 
-| Field          | Arti                                                                                                                                    |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `headless`     | `true` (bawaan) tanpa jendela; `--headful` menimpa                                                                                      |
-| `accounts`     | 2 sampai 8 nick milikmu                                                                                                                 |
-| `hostName`     | nick host; akun ini jadi `host`, sisanya `guest`                                                                                        |
-| `winnerName`   | akun pemenang untuk mode `grind`                                                                                                        |
-| `mode`         | `grind` (Grinding XP) atau `arena` (Arena pintar)                                                                                       |
-| `room`         | `access` (`privat`/`teman`), `mode`, `difficulty`, `startingCash` (5/10/15), `maxPlayers` (4/6/8), `map`, `awards`, `autoByAchievement` |
-| `achievements` | `enabled`, `targets` (id pencapaian; kosong = otomatis)                                                                                 |
-| `strategy`     | `riskTolerance` 0 sampai 1, `reserveRounds`, `lendInterest`, `usePinjol`                                                                |
-| `chat`         | `enabled`, `stickers`, `quickPhrases`, `customPhrases`                                                                                  |
-| `timing`       | `tickMs`, `actionDelayMs` [min, maks], `buildDelayPerTileMs`, `watchdogMs`, `minStartPlayers`, `inviteRetryMs`                          |
-| `debug`        | log lebih rinci                                                                                                                         |
+| Field           | Arti                                                                                                                                    |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `headless`      | `true` (bawaan) tanpa jendela; `--headful` menimpa                                                                                      |
+| `accounts`      | 2 sampai 8 nick milikmu yang ikut main (roster; tiap akun dijalankan); tidak boleh melebihi `room.maxPlayers`                           |
+| `knownAccounts` | opsional: nick milikmu lain yang boleh ada di room tanpa menjeda bot (tidak dijalankan, tidak diundang)                                 |
+| `hostName`      | nick host; akun ini jadi `host`, sisanya `guest`                                                                                        |
+| `winnerName`    | akun pemenang untuk mode `grind`                                                                                                        |
+| `mode`          | `grind` (Grinding XP) atau `arena` (Arena pintar)                                                                                       |
+| `room`          | `access` (`privat`/`teman`), `mode`, `difficulty`, `startingCash` (5/10/15), `maxPlayers` (4/6/8), `map`, `awards`, `autoByAchievement` |
+| `achievements`  | `enabled`, `targets` (id pencapaian; kosong = otomatis)                                                                                 |
+| `strategy`      | `riskTolerance` 0 sampai 1, `reserveRounds`, `lendInterest`, `usePinjol`                                                                |
+| `chat`          | `enabled`, `stickers`, `quickPhrases`, `customPhrases`                                                                                  |
+| `timing`        | `tickMs`, `actionDelayMs` [min, maks], `buildDelayPerTileMs`, `watchdogMs`, `minStartPlayers`, `inviteRetryMs`                          |
+| `debug`         | log lebih rinci                                                                                                                         |
 
 `myName` dan `role` diisi otomatis per akun.
 

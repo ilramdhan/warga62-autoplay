@@ -68,11 +68,16 @@ function normalizeProperties(game) {
   return out;
 }
 
-/** Ambil daftar pinjaman aktif dengan bentuk yang dinormalisasi. */
-function normalizeLoans(game) {
+/**
+ * Ambil daftar pinjaman aktif dengan bentuk yang dinormalisasi. Pinjaman yang peminjam atau pemberinya sudah
+ * bangkrut dibuang: di game "Utang dan piutangnya hangus", jadi tidak boleh dihitung sebagai utang/piutang.
+ * @param {object} game
+ * @param {(id: string) => boolean} [isBankrupt]
+ */
+function normalizeLoans(game, isBankrupt = () => false) {
   const raw = Array.isArray(game?.loans) ? game.loans : [];
   return raw
-    .filter((l) => l && typeof l === 'object' && !l.repaid && !l.paid)
+    .filter((l) => l && typeof l === 'object' && !l.repaid && !l.paid && !l.void && !l.cancelled)
     .map((l) => {
       const principal = num(l.principal ?? l.amount);
       const pct = num(l.interestPercent ?? l.interest ?? l.rate);
@@ -88,7 +93,8 @@ function normalizeLoans(game) {
         turnsLeft: optNum(l.turnsLeft) ?? optNum(l.dueIn) ?? optNum(l.remainingTurns),
         kind: l.kind ?? (l.lender === 'pinjol' ? 'pinjol' : 'player'),
       };
-    });
+    })
+    .filter((l) => !isBankrupt(l.borrower) && !(l.kind !== 'pinjol' && isBankrupt(l.lender)));
 }
 
 /**
@@ -119,7 +125,11 @@ export function buildView(game, meId, cfg = {}) {
   const opponents = allPlayers.filter((p) => p.id !== me.id && !p.bankrupt);
 
   const properties = normalizeProperties(g);
-  const loans = normalizeLoans(g);
+  const bankruptKey = (key) => {
+    const p = findPlayer(key);
+    return Boolean(p?.bankrupt);
+  };
+  const loans = normalizeLoans(g, bankruptKey);
   const myTiles = properties.map((p, i) => (p.owner === me.id ? i : -1)).filter((i) => i >= 0);
 
   const ruleMult = optNum(rules.rentMultiplier) ?? optNum(g.rentMultiplier);
@@ -191,7 +201,20 @@ export function buildView(game, meId, cfg = {}) {
     return num(findPlayer(pid)?.debt);
   };
 
+  /** Piutang: pinjaman aktif ke pemain lain di mana `id` pemberi pinjaman (jumlah tagihan). */
+  const receivablesOf = (id) => {
+    const pid = idOf(id);
+    return loans
+      .filter((l) => l.kind !== 'pinjol' && l.lender === pid && l.borrower !== pid)
+      .reduce((s, l) => s + l.owed, 0);
+  };
+
   const redeemRatio = optNum(rules.redeem) ?? difficulty.redeem;
+  /**
+   * Kekayaan bersih = kas + harga tanah + biaya bangunan + piutang − utang (sesuai "Cara Main" mode Ronde).
+   * Catatan: aturan menyebut "harga tanah" tanpa membedakan tanah gadai; di sini tanah gadai tetap dinilai
+   * harga × (1 − rasio tebus) (konservatif). Perlu verifikasi di game apakah peringkat memakai harga penuh.
+   */
   const netWorth = (id) => {
     const pid = idOf(id);
     const p = findPlayer(pid);
@@ -203,7 +226,7 @@ export function buildView(game, meId, cfg = {}) {
       const info = PROVINCES[prov];
       total += prop.mortgaged ? info.price * (1 - redeemRatio) : info.price + prop.level * info.upgradeCost;
     });
-    return total - debtOf(pid);
+    return total + receivablesOf(pid) - debtOf(pid);
   };
 
   const mode = c.mode === 'grind' ? 'grind' : 'arena';
@@ -227,6 +250,19 @@ export function buildView(game, meId, cfg = {}) {
     if (!pinjolCfg || pinjolDisabled) return false;
     const p = findPlayer(id);
     return num(p?.pinjolTaken) < pinjolCfg.uses;
+  };
+
+  /**
+   * Info giliran berjalan (opsional, bentuk belum diverifikasi): dadu terakhir & apakah giliran ini gajian.
+   * Dibaca dari game.lastRoll|lastDice|dice dan game.salaryThisTurn|passedStartThisTurn|pending.salaryTurn.
+   */
+  const diceRaw = [g.lastRoll, g.lastDice, g.dice].find((d) => Array.isArray(d) && d.length >= 2);
+  const dice = diceRaw ? diceRaw.slice(0, 2).map((d) => num(d)) : null;
+  const salaryRaw = g.salaryThisTurn ?? g.passedStartThisTurn ?? g.pending?.salaryTurn;
+  const turn = {
+    dice,
+    doubles: dice ? dice[0] > 0 && dice[0] === dice[1] : undefined,
+    salary: typeof salaryRaw === 'boolean' ? salaryRaw : undefined,
   };
 
   /** Biaya petak khusus (sudah dikali multiplier tingkat & Krisis). */
@@ -282,7 +318,9 @@ export function buildView(game, meId, cfg = {}) {
     isTakeoverSafe,
     takeoverPrice: (i) => Math.round(tileValue(i) * difficulty.takeoverMultiplier),
     debtOf,
+    receivablesOf,
     netWorth,
+    turn,
     cashOf: (id) => num(findPlayer(id)?.cash),
     position: (id) => findPlayer(id)?.position ?? 0,
     isJailed: (id) => Boolean(findPlayer(id)?.inJail),

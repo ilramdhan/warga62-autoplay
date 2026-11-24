@@ -1,6 +1,7 @@
 import error from './error.js';
 import inviteIncoming from './invite-incoming.js';
 import afk from './afk.js';
+import stillHere from './still-here.js';
 import moneyRequest from './money-request.js';
 import order from './order.js';
 import endgame from './endgame.js';
@@ -31,6 +32,7 @@ export const handlers = [
   error,
   inviteIncoming,
   afk,
+  stillHere,
   moneyRequest,
   order,
   endgame,

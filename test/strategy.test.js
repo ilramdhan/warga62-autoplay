@@ -89,11 +89,31 @@ test('grind: pemenang membeli, bangun, menolak bayar feeder', () => {
   });
 });
 
-test('grind: pemenang jual bangunan termurah dulu', () => {
+test('grind: pemenang gadai kota lepas sebelum menjual bangunan provinsi lengkap', () => {
   const p = createPolicy(GRIND);
-  const props = { 3: { owner: 'w', level: 2 }, 47: { owner: 'w', level: 1 } };
+  // Aceh lengkap berbangunan + DKI 47 tanah kosong: gadai 47 lebih murah per rupiah daripada merusak Aceh.
+  const props = {
+    1: { owner: 'w', level: 1 },
+    2: { owner: 'w', level: 1 },
+    3: { owner: 'w', level: 1 },
+    47: { owner: 'w' },
+  };
   const v = buildView(game({ properties: props }), 'w', GRIND);
-  assert.deepEqual(p.debtStep(v, { owe: 1e6, canSell: [47, 3], canMortgage: [] }), { type: 'sell', tile: 3 });
+  assert.deepEqual(p.debtStep(v, { owe: 500_000, canSell: [1, 2, 3], canMortgage: [47] }), {
+    type: 'mortgage',
+    tile: 47,
+  });
+  // Target Pinjol tetap didahulukan.
+  const cfg = { ...GRIND, policyFlags: { winner: { wantPinjol: true } } };
+  assert.deepEqual(
+    createPolicy(cfg).debtStep(buildView(game({ properties: props }), 'w', cfg), {
+      owe: 500_000,
+      canSell: [1, 2, 3],
+      canMortgage: [47],
+      canPinjol: true,
+    }),
+    { type: 'pinjol' },
+  );
 });
 
 const ARENA = { mode: 'arena', strategy: { riskTolerance: 0.5 } };
@@ -166,14 +186,13 @@ test('smart: urutan gali lubang — jual bangunan berdampak kecil dulu, provinsi
 test('smart: bunga pinjaman sesuai risiko', () => {
   const p = createPolicy(ARENA);
   const g = arenaGame(20_000_000);
-  g.players.op = { id: 'op', name: 'B', cash: -500_000, position: 30 };
-  g.properties = { 45: { owner: 'op', level: 0 } };
+  g.players.op = { id: 'op', name: 'B', cash: -200_000, position: 30 };
+  g.properties = { 45: { owner: 'op', level: 0 }, 46: { owner: 'op', level: 0 } };
   const v = buildView(g, 'me', ARENA);
-  const small = p.lendOffer(v, { borrowerId: 'op', amount: 200_000 });
-  const big = p.lendOffer(v, { borrowerId: 'op', amount: 900_000 });
-  assert.ok(LOAN_INTEREST_OPTIONS.includes(small));
-  assert.ok(LOAN_INTEREST_OPTIONS.includes(big));
-  assert.ok(big > small);
+  const small = p.lendOffer(v, { borrowerId: 'op', amount: 300_000 });
+  assert.ok(LOAN_INTEREST_OPTIONS.includes(small) && small > 0, `bunga ${small}`);
+  // Pinjaman besar menaikkan peluang gagal bayar → EV negatif → tidak menawarkan (bukan 50%).
+  assert.equal(p.lendOffer(v, { borrowerId: 'op', amount: 1_000_000 }), null, 'gagal bayar tinggi');
   assert.equal(p.lendOffer(v, { borrowerId: 'op', amount: 5_000_000 }), null, 'hampir bangkrut');
   const poor = buildView({ ...g, players: { ...g.players, me: { id: 'me', cash: 300_000 } } }, 'me', ARENA);
   assert.equal(p.lendOffer(poor, { borrowerId: 'op', amount: 200_000 }), null);

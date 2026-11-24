@@ -66,8 +66,13 @@ test/                  # node:test
   myName: '',                 // nick akun di instance ini (WAJIB)
   role: 'host' | 'guest',     // host = pembuat room
   mode: 'grind' | 'arena',
-  accounts: ['ilramdhan.dev', 'JULE'],   // semua nick milik user (1–8). myName, hostName, dan (grind) winnerName
-                                         // otomatis ditambahkan. Host mengundang selain dirinya.
+  accounts: ['ilramdhan.dev', 'JULE'],   // akun dikenal = whitelist pengaman (1–30): pemain di luar daftar ini
+                                         // menjeda bot. Selalu memuat semua nama `roster`.
+  roster: ['ilramdhan.dev', 'JULE'],     // akun yang ikut main sesi ini (1–8, ≤ room.maxPlayers, termasuk diri sendiri).
+                                         // myName, hostName, dan (grind) winnerName otomatis ditambahkan. Host hanya
+                                         // mengundang & menunggu roster; planner menghitung kursi dari roster.
+                                         // Migrasi: config lama tanpa `roster` -> roster = nick sendiri + accounts lama,
+                                         // dipotong ke room.maxPlayers.
   hostName: 'ilramdhan.dev',  // undangan hanya diterima dari nick ini. Boleh kosong untuk guest (tanpa auto-terima).
   winnerName: 'JULE',         // mode grind: akun yang dibuat menang
   room: {                     // diterapkan host lewat tombol "Atur"
@@ -90,18 +95,40 @@ test/                  # node:test
 
 ## Protokol host ⇄ bot (`entry-page.js`)
 
+- Target bot ditanam saat build (`__W62_TARGET__` di `scripts/build.js`), bukan dibaca dari halaman:
+  `dist/bot.js` = `runner`, `dist/extension/bot.js` = `extension`.
 - Config masuk:
-  - Extension: `bridge.js` mengirim `window.postMessage({ source: 'w62-host', type: 'config', config }, location.origin)` saat halaman dimuat dan setiap kali `chrome.storage.local['w62.config']` berubah. Perintah: `{ source:'w62-host', type:'command', command:'start'|'stop'|'reset' }`.
-  - Runner: `window.__W62_CONFIG__` di-set lewat `addInitScript` sebelum bot.js jalan.
+  - Extension: `bridge.js` mengirim `window.postMessage({ source: 'w62-host', type: 'config', config }, location.origin)` saat halaman dimuat dan setiap kali `chrome.storage.local['w62.config']` berubah. Perintah: `{ source:'w62-host', type:'command', command:'start'|'stop'|'reset' }`. `window.__W62_CONFIG__` **diabaikan** di build extension.
+  - Runner: `window.__W62_CONFIG__` di-set lewat `addInitScript` sebelum bot.js jalan. Pesan `w62-host` diabaikan di build runner.
+  - Penyaring (`src/core/protocol.js`, `filterHostMessage`): perintah selain `start`/`stop`/`reset` dibuang; config hanya
+    menyimpan kunci tingkat atas yang ada di `DEFAULT_CONFIG`, lalu melewati `normalizeConfig` + `validateConfig`.
 - Event keluar: bot memanggil `window.__w62Emit(event)` kalau fungsi itu ada (runner, via `exposeBinding`), dan selalu `window.postMessage({ source: 'w62-bot', type: 'event', event }, location.origin)` (diterima bridge).
-- `bridge.js` menyimpan status terakhir ke `chrome.storage.session['w62.status']` dan log ke `chrome.storage.local['w62.logs']` (ring buffer 500).
+- `bridge.js` menyaring event dengan `sanitizeBotEvent` (tipe `log|status|error|game_over|achievement`, level log
+  `debug|info|warn|error`, hanya field yang dikenal per tipe, `msg` maks 500 karakter, string lain maks 200, array maks 50,
+  kedalaman maks 5), lalu menyimpan status terakhir ke `chrome.storage.session['w62.status']` dan log ke
+  `chrome.storage.local['w62.logs']` (ring buffer 500). Field status baru harus ditambahkan ke `EVENT_FIELDS` di
+  `protocol.js` supaya sampai ke popup.
+- Muat-ganda dicegah dengan penanda `window[Symbol.for('w62.autoplay.loaded')]` yang didefinisikan bot sendiri
+  (non-writable, non-configurable). `window.__W62_BOT__` hanya info read-only (`{ version, target, getStatus }`).
+- Batasan yang tersisa: bot.js berjalan di MAIN world, satu konteks JavaScript dengan skrip halaman, jadi tidak bisa
+  diisolasi penuh. Skrip halaman tetap bisa mengirim pesan `w62-host` yang lolos penyaring (mis. `stop`, atau config
+  valid lain), mengirim event `w62-bot` palsu yang lolos penyaring ke log/status, menimpa API global yang dipakai bot,
+  atau mendefinisikan penanda muat-ganda lebih dulu sehingga bot tidak jalan. Penyaring membatasi bentuk pesan dan
+  dampaknya ke `chrome.storage`, bukan asal-usulnya; batas keamanan sebenarnya tetap: extension hanya aktif di
+  `mainwarga62.id` dan pengaman integritas (room privat/teman, daftar akun sendiri) dijalankan di engine/handler.
 - Bot hanya aktif di path `/`, `/online`, `/room/*`. Halaman lain (`/profil`, `/cara-main`, dll.) diabaikan, kecuali handler `profile-sync` yang hanya membaca.
 
 ## Status & event (bot → host)
 
 Pengaman integritas di engine: bila game terbaca dan ada pemain yang tidak ada di `cfg.accounts`, bot dijeda
 (`status.state = 'paused'`, `reason = 'foreign'`, `players[]`, `foreign[]`) dan tidak melakukan aksi apa pun.
-Popup menampilkan daftar pemain dan tombol untuk mendaftarkan nama itu bila memang akun milik user sendiri.
+Popup menampilkan daftar pemain dan tombol untuk mendaftarkan nama itu ke `accounts` (akun dikenal) bila memang
+akun milik user sendiri; `roster` tidak berubah, jadi undangan dan kursi room tetap.
+
+Validasi (`validateConfigDetailed`): `roster` ≤ `room.maxPlayers` dan semua ada di `accounts`; host:
+`timing.minStartPlayers` ≤ jumlah roster. `configWarnings` (informasi saja): roster < 3 (papan peringkat hanya
+menghitung game ≥10 ronde dengan ≥3 pemain). Undangan host (`selectInvitees` di `handlers/util.js`): hanya roster yang
+belum hadir dan belum "Terundang", total tamu ≤ `maxPlayers − 1` (maxPlayers dari `roomPreset`, fallback `room`).
 
 `host.emit(event)` dengan `event = { type: 'log'|'status'|'error'|'game_over'|'achievement', ts, ...payload }`.
 Extension meneruskan ke `chrome.storage.session` (status) dan ring buffer log (maks 500). Runner mencetak ke stdout.

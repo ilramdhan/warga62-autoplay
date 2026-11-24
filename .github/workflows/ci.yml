@@ -17,17 +17,17 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          node-version: 22
-          # Cache npm diaktifkan otomatis hanya jika ada package-lock.json.
-          cache: ${{ hashFiles('package-lock.json') != '' && 'npm' || '' }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
 
       - name: Install dependencies
-        run: |
-          if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
+        run: npm ci
 
       - name: Lint
         run: npm run lint
@@ -44,12 +44,13 @@ jobs:
       - name: Validate manifest
         run: npm run validate
 
+      # Masih ada temuan markdownlint lama di beberapa dokumen; jangan gagalkan CI sampai dirapikan.
       - name: Markdown lint
         continue-on-error: true
-        run: npx markdownlint-cli2 "**/*.md" "#node_modules" "#dist"
+        run: npm run lint:md
 
       - name: Upload extension artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: warga62-extension
           path: dist/*.zip

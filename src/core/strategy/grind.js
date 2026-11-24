@@ -5,7 +5,7 @@
  * policyFlags boleh berisi kunci umum + sub-objek `winner` / `feeder` (lihat planner.js).
  */
 import { PROVINCES, TILES, provinceOf } from '../data/board.js';
-import { parseRupiahText, recommendedReserve, visitProbabilities } from './risk.js';
+import { dueSoonDebt, parseRupiahText, recommendedReserve, visitProbabilities } from './risk.js';
 import { createSmartPolicy } from './smart.js';
 
 const num = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
@@ -56,12 +56,36 @@ export function createGrindPolicy(cfg = {}) {
     return 'feeder';
   };
   const holdActive = (view) => view.round < num(ff.holdBankruptUntilRound, 0);
+  const ROLL_TARGETS = ['perfect', 'cupu', 'biasa'];
+  // Semua akun di meja grind memakai target lempar yang sama (default Perfect); distribusi gerak ikut target itu.
+  const winnerTarget = () => (ROLL_TARGETS.includes(wf.rollTarget) ? wf.rollTarget : 'perfect');
+  const feederTarget = () => (ROLL_TARGETS.includes(ff.rollTarget) ? ff.rollTarget : 'perfect');
   const winnerReserve = (view) => {
     if (typeof wf.reserveOverride === 'number') return wf.reserveOverride;
-    const r = recommendedReserve(view, view.meId, { turns: 2, riskTolerance: wf.neverNegative ? 0.2 : 0.8 });
+    const r = recommendedReserve(view, view.meId, {
+      turns: 2,
+      riskTolerance: wf.neverNegative ? 0.2 : 0.8,
+      target: winnerTarget(),
+    });
     return wf.neverNegative ? r + 500_000 : r;
   };
   const isWinnerId = (view, id) => view.isWinner(id) || String(id) === winnerName;
+  /** Cadangan minimal feeder saat meminjamkan ke pemenang: ekspektasi pengeluaran 1 giliran. */
+  const feederMinReserve = (view) =>
+    recommendedReserve(view, view.meId, { turns: 1, riskTolerance: 1, target: feederTarget() });
+  /**
+   * Alasan pinjaman antar-akun tidak aman (string) atau null. Peminjam = akun sendiri, jadi tanpa hitung EV;
+   * tetap wajib: jumlah diketahui, peminjam belum bangkrut, sisa kas ≥ `minCash` (dan kita tidak berutang bila
+   * `noDebt`; feeder boleh berutang karena uangnya memang dialirkan ke pemenang).
+   */
+  const lendUnsafe = (view, borrowerId, amount, minCash, noDebt = true) => {
+    const b = view.player(borrowerId);
+    if (!b || b.bankrupt) return 'peminjam tidak ada / bangkrut';
+    if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) return 'jumlah tidak diketahui';
+    if (view.me.cash < 0 || (noDebt && num(view.debtOf(view.meId)) > 0)) return 'kita masih berutang';
+    if (view.me.cash - amount < Math.max(0, num(minCash))) return 'kas kita tipis';
+    return null;
+  };
 
   // ---------- feeder ----------
   const feeder = {
@@ -78,7 +102,7 @@ export function createGrindPolicy(cfg = {}) {
       if (holdActive(view)) {
         const keep = Math.max(
           num(ff.feederKeepCash),
-          recommendedReserve(view, p.id, { turns: 2, riskTolerance: 0 }),
+          recommendedReserve(view, p.id, { turns: 2, riskTolerance: 0, target: feederTarget() }),
           view.fees.toll,
         );
         amount = Math.floor(Math.max(0, cash - keep) / MIN_SEND) * MIN_SEND;
@@ -177,7 +201,12 @@ export function createGrindPolicy(cfg = {}) {
       if (hold && canPinjol) return why('feeder: Pinjol (tahan bangkrut)', { type: 'pinjol' });
       return why('feeder: bangkrut', { type: 'bankrupt' });
     },
-    lendOffer: () => why('feeder: tidak meminjamkan', null),
+    lendOffer: (view, { borrowerId, amount } = {}) => {
+      if (!isWinnerId(view, borrowerId)) return why('feeder: tidak meminjamkan', null);
+      const unsafe = lendUnsafe(view, borrowerId, amount, feederMinReserve(view), false);
+      if (unsafe) return why(`feeder: tidak meminjamkan ke pemenang (${unsafe})`, null);
+      return why('feeder: pinjamkan 0% ke pemenang', 0);
+    },
     acceptLoan: (view, { offers = [] } = {}) => {
       const list = (Array.isArray(offers) ? offers : []).filter((o) => o && (o.lender ?? o.lenderId) != null);
       if (!list.length) return why('tidak ada tawaran', null);
@@ -216,14 +245,40 @@ export function createGrindPolicy(cfg = {}) {
         actions.push({ type: 'payBail' }); // sewa pemenang masuk Negara selama di Lapas
         cash -= view.fees.bail;
       }
-      const ratio = num(view.rules.redeem, view.difficulty.redeem);
-      for (const t of view.myTiles.filter((x) => view.properties[x].mortgaged)) {
-        const cost = Math.round(PROVINCES[provinceOf(t)].price * ratio);
-        if (cash - cost >= reserve) {
-          actions.push({ type: 'redeem', tile: t });
-          cash -= cost;
+      // Lunasi utang mahal / hampir jatuh tempo kalau kas tetap di atas cadangan (sama seperti smart).
+      const debt = num(view.debtOf(p.id));
+      const freeReserve = Math.max(0, reserve - dueSoonDebt(view, p.id));
+      const myLoans = (view.loans ?? []).filter((l) => l.borrower === p.id);
+      // Jatuh tempo ≤ 1 giliran: telat Pinjol = semua tanah disita, telat pinjaman pemain = ditagih paksa.
+      if (debt > 0 && cash >= debt && myLoans.some((l) => l.turnsLeft !== undefined && l.turnsLeft <= 1)) {
+        actions.push({ type: 'repay' });
+        cash -= debt;
+      } else if (debt > 0 && cash - debt >= freeReserve) {
+        const mine = myLoans;
+        const costly = mine.some((l) => l.kind === 'pinjol' || l.lender === 'pinjol' || l.interest >= 0.25);
+        const dueSoon = mine.some((l) => l.turnsLeft !== undefined && l.turnsLeft <= 1);
+        const unknown = !mine.length;
+        if (costly || dueSoon || (unknown && cash - debt >= freeReserve * 1.5)) {
+          actions.push({ type: 'repay' });
+          cash -= debt;
         }
       }
+      // Tebus: provinsi lengkap dulu (sewa 2× & bisa dibangun), lalu sewa tertinggi.
+      const ratio = num(view.rules.redeem, view.difficulty.redeem);
+      view.myTiles
+        .filter((x) => view.properties[x].mortgaged && provinceOf(x))
+        .map((t) => ({
+          t,
+          cost: Math.round(PROVINCES[provinceOf(t)].price * ratio),
+          prio: (view.ownsProvince(p.id, provinceOf(t)) ? 2 : 1) * view.rentAt(t, 0, p.id),
+        }))
+        .sort((a, b) => b.prio - a.prio || a.t - b.t)
+        .forEach(({ t, cost }) => {
+          if (cash - cost >= reserve) {
+            actions.push({ type: 'redeem', tile: t });
+            cash -= cost;
+          }
+        });
       return why(`pemenang: pre-roll ${actions.map((a) => a.type).join(',') || '-'}`, actions);
     },
     shouldBuy: (view, { tile, price } = {}) => {
@@ -242,7 +297,11 @@ export function createGrindPolicy(cfg = {}) {
     },
     chooseUpgrades: (view, candidates = []) => {
       const list = (Array.isArray(candidates) ? candidates : []).filter(
-        (t) => provinceOf(t) && view.properties[t]?.owner === view.meId && view.properties[t].level < 3,
+        (t) =>
+          provinceOf(t) &&
+          view.properties[t]?.owner === view.meId &&
+          !view.properties[t].mortgaged &&
+          view.properties[t].level < 3,
       );
       let budget = view.me.cash - winnerReserve(view);
       const picked = [];
@@ -255,20 +314,20 @@ export function createGrindPolicy(cfg = {}) {
       }
       return why(`pemenang: bangun ${picked.join(',') || '-'}`, picked);
     },
-    debtStep: (view, { canSell = [], canMortgage = [], canLoan, canPinjol, triedLoan } = {}) => {
-      if (wf.wantPinjol && canPinjol) return why('pemenang: Pinjol (target pencapaian)', { type: 'pinjol' });
-      const cheapest = (arr, fn) => [...arr].filter((t) => provinceOf(t)).sort((a, b) => fn(a) - fn(b) || a - b)[0];
-      const s = cheapest(Array.isArray(canSell) ? canSell : [], (t) => PROVINCES[provinceOf(t)].upgradeCost);
-      if (s != null) return why('pemenang: jual bangunan termurah', { type: 'sell', tile: s });
-      const m = cheapest(Array.isArray(canMortgage) ? canMortgage : [], (t) => PROVINCES[provinceOf(t)].price);
-      if (m != null) return why('pemenang: gadai kota termurah', { type: 'mortgage', tile: m });
-      if (canLoan && !triedLoan) return why('pemenang: minta pinjaman', { type: 'requestLoan' });
-      if (canPinjol) return why('pemenang: Pinjol', { type: 'pinjol' });
-      return why('pemenang: tidak ada pilihan, bangkrut', { type: 'bankrupt' });
+    // Gali Lubang: selain target Pinjol, pakai perbandingan kerugian per rupiah milik smart (gadai kota lepas
+    // lebih murah daripada menjual bangunan di provinsi lengkap).
+    debtStep: (view, arg = {}) => {
+      if (wf.wantPinjol && arg?.canPinjol) return why('pemenang: Pinjol (target pencapaian)', { type: 'pinjol' });
+      return via(base, 'debtStep', [view, arg]);
     },
-    lendOffer: (view, { borrowerId } = {}) => {
+    lendOffer: (view, { borrowerId, amount } = {}) => {
       if (!view.isFeeder(borrowerId)) return why('pemenang: tidak meminjamkan ke non-feeder', null);
-      if (typeof wf.lendInterest === 'number') return why(`pemenang: pinjamkan ${wf.lendInterest}%`, wf.lendInterest);
+      const wantFixed = typeof wf.lendInterest === 'number';
+      if (wantFixed || holdActive(view)) {
+        const unsafe = lendUnsafe(view, borrowerId, amount, winnerReserve(view) * 1.5);
+        if (unsafe) return why(`pemenang: tidak meminjamkan (${unsafe})`, null);
+      }
+      if (wantFixed) return why(`pemenang: pinjamkan ${wf.lendInterest}%`, wf.lendInterest);
       if (holdActive(view)) return why('pemenang: pinjaman 0% agar feeder bertahan sampai ronde target', 0);
       return why('pemenang: tidak meminjamkan', null);
     },

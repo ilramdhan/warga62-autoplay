@@ -22,18 +22,47 @@ export function findGameInFiber(fiber, maxDepth = MAX_DEPTH) {
   return null;
 }
 
-function stripForbidden(obj) {
-  const out = {};
-  for (const k of Object.keys(obj)) if (!FORBIDDEN_KEY.test(k)) out[k] = obj[k];
-  return out;
+/** Kedalaman maksimum pembersihan kunci seed/rng (cukup untuk game.settings, players[i].x, pending.y.z). */
+export const SANITIZE_DEPTH = 6;
+
+const isPlain = (v) => {
+  if (!v || typeof v !== 'object') return false;
+  const proto = Object.getPrototypeOf(v);
+  return proto === Object.prototype || proto === null || Array.isArray(v);
+};
+
+/**
+ * Salinan `v` tanpa kunci yang cocok /seed|rng/i sampai `depth` level. Copy-on-write: objek/array yang
+ * tidak berisi kunci terlarang dikembalikan apa adanya (tanpa alokasi). Objek non-plain tidak disentuh.
+ */
+function strip(v, depth) {
+  if (depth <= 0 || !isPlain(v)) return v;
+  if (Array.isArray(v)) {
+    let out = null;
+    for (let i = 0; i < v.length; i++) {
+      const c = strip(v[i], depth - 1);
+      if (c !== v[i]) (out ??= v.slice())[i] = c;
+    }
+    return out ?? v;
+  }
+  let out = null;
+  for (const k of Object.keys(v)) {
+    if (FORBIDDEN_KEY.test(k)) {
+      out ??= { ...v };
+      delete out[k];
+      continue;
+    }
+    const c = strip(v[k], depth - 1);
+    if (c !== v[k]) (out ??= { ...v })[k] = c;
+  }
+  return out ?? v;
 }
 
-/** Klon dangkal tanpa kunci seed/rng (juga di `settings`). */
+/** Klon tanpa kunci seed/rng di level mana pun (dibatasi SANITIZE_DEPTH). Selalu objek baru di level atas. */
 export function sanitizeGame(game) {
   if (!game || typeof game !== 'object') return null;
-  const clone = stripForbidden(game);
-  if (clone.settings && typeof clone.settings === 'object') clone.settings = stripForbidden(clone.settings);
-  return clone;
+  const clone = strip(game, SANITIZE_DEPTH);
+  return clone === game ? { ...game } : clone;
 }
 
 function anchors(doc) {
@@ -47,12 +76,23 @@ function anchors(doc) {
   return list;
 }
 
-/** @returns {object|null} salinan dangkal game, atau null kalau tidak terbaca. */
+/** Jangkar terakhir yang berhasil menemukan game; dicoba lebih dulu agar tidak memindai DOM tiap tick. */
+let lastAnchor = null;
+
+/** @returns {object|null} salinan game tanpa seed/rng, atau null kalau tidak terbaca. */
 export function readGame(doc = document) {
   try {
+    if (lastAnchor?.isConnected && lastAnchor.ownerDocument === doc) {
+      const game = findGameInFiber(fiberOf(lastAnchor));
+      if (game) return sanitizeGame(game);
+    }
+    lastAnchor = null;
     for (const node of anchors(doc)) {
       const game = findGameInFiber(fiberOf(node));
-      if (game) return sanitizeGame(game);
+      if (game) {
+        lastAnchor = node;
+        return sanitizeGame(game);
+      }
     }
   } catch {
     // struktur fiber berubah: biarkan handler pakai DOM saja

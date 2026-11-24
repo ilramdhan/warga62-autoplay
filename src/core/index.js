@@ -28,7 +28,8 @@ function withPlan(cfg) {
   const usePlanner = cfg.achievements?.enabled === true || cfg.room?.autoByAchievement === true;
   if (!usePlanner) return { ...cfg, policyFlags: {}, roomPreset };
   try {
-    const plan = planAchievements(ACHIEVEMENTS, {}, cfg);
+    // Planner menghitung kursi & syarat jumlah pemain dari akun yang IKUT MAIN (roster), bukan semua akun dikenal.
+    const plan = planAchievements(ACHIEVEMENTS, {}, { ...cfg, accounts: cfg.roster ?? cfg.accounts });
     return {
       ...cfg,
       policyFlags: plan.policyFlags ?? {},
@@ -40,8 +41,20 @@ function withPlan(cfg) {
   }
 }
 
+/** Kesamaan struktural untuk data config (objek/array/primitif JSON). */
+export function deepEqual(a, b) {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const ka = Object.keys(a);
+  const kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  return ka.every((k) => Object.prototype.hasOwnProperty.call(b, k) && deepEqual(a[k], b[k]));
+}
+
 export function createBot(config, host) {
-  let cfg = withPlan(normalizeConfig(config));
+  let base = normalizeConfig(config);
+  let cfg = withPlan(base);
   const emit = (event) => {
     try {
       host?.emit?.({ ts: Date.now(), ...event });
@@ -59,8 +72,13 @@ export function createBot(config, host) {
     getConfig: () => cfg,
     /** Gabungkan perubahan ke config aktif. Mengembalikan daftar galat validasi (kosong = valid). */
     updateConfig(partial) {
-      cfg = withPlan(normalizeConfig(deepMerge(cfg, partial ?? {})));
-      log.setDebug(cfg.debug);
+      const next = normalizeConfig(deepMerge(base, partial ?? {}));
+      // Config sama persis: pertahankan objek lama (engine tidak memvalidasi ulang / membuat ulang strategi).
+      if (!deepEqual(next, base)) {
+        base = next;
+        cfg = withPlan(base);
+        log.setDebug(cfg.debug);
+      }
       return validateConfig(cfg);
     },
   };

@@ -5,10 +5,12 @@
  * - 2d6; zona Perfect menggandakan peluang kembar (2/36 per angka kembar), Cupu membaginya dua.
  * - Kembar tidak memberi giliran tambahan (hanya menarik kartu Takdir), jadi satu giliran = satu gerakan.
  * - Mendarat di Gerbang Tol -> pindah ke gerbang tol lain (gerakan berikutnya dari sana).
- * - Razia: 1/3 masuk Lapas. Pengadilan: 2/3 masuk Lapas. Lama di Lapas diabaikan.
+ * - Razia/Pengadilan memakai lemparan satu dadu: Biasa/Cupu satu dadu, Perfect dua dadu ambil yang TERTINGGI
+ *   (Razia Lapas 1/9; Pengadilan menang 5/9, Lapas+denda 1/3, Lapas+sita 1/9). Lama di Lapas diabaikan di
+ *   model gerak, tapi biayanya (jaminan + sewa yang masuk Negara) dihitung di landingCost.
  * Bot TIDAK memprediksi dadu: ini peluang murni, sama dengan yang bisa dihitung pemain biasa.
  */
-import { BOARD_SIZE, TILES, provinceOf } from '../data/board.js';
+import { BOARD_SIZE, LOAN_INTEREST_OPTIONS, PROVINCES, TILES, provinceOf } from '../data/board.js';
 
 export const JAIL_TILE = TILES.findIndex((t) => t.kind === 'jail');
 export const TOLL_TILES = TILES.map((t, i) => (t.kind === 'toll' ? i : -1)).filter((i) => i >= 0);
@@ -17,6 +19,8 @@ export const HOTSPOTS = [0, JAIL_TILE, ...TOLL_TILES];
 
 /** Perkiraan rata-rata kerugian satu kartu Musibah (asumsi, lihat docs/strategy.md). */
 export const MUSIBAH_EXPECTED_LOSS = 300_000;
+
+const num = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 
 export const distanceForward = (from, to) => (((to - from) % BOARD_SIZE) + BOARD_SIZE) % BOARD_SIZE;
 
@@ -41,23 +45,31 @@ export function diceSumDistribution(target = 'biasa') {
   return { sum, doubleBySum, pDouble };
 }
 
+/**
+ * Peluang hasil lemparan satu dadu (Razia, Pengadilan) menurut zona lempar. Perfect melempar dua dadu dan
+ * mengambil yang tertinggi; `rolls` > 1 = lempar ulang ambil terbaik (Pengacara Kenalan), jadi jumlah dadu
+ * yang diambil maksimumnya = rolls × (Perfect ? 2 : 1). P(maks ≤ k) = (k/6)^n.
+ * @returns {{low:number, mid:number, high:number}} low = 1–2, mid = 3–4, high = 5–6
+ */
+export function singleDieOdds(target = 'biasa', rolls = 1) {
+  const n = Math.max(1, Math.trunc(num(rolls, 1))) * (target === 'perfect' ? 2 : 1);
+  const le = (k) => (k / 6) ** n;
+  return { low: le(2), mid: le(4) - le(2), high: 1 - le(4) };
+}
+
 /** Tujuan akhir setelah mendarat di petak t (tol -> gerbang lain, Razia/Pengadilan -> sebagian ke Lapas). */
-function settle(t) {
+function settle(t, target = 'biasa') {
   const kind = TILES[t]?.kind;
   if (kind === 'toll' && TOLL_TILES.length > 1) {
     const other = TOLL_TILES.find((x) => x !== t);
     return [[other, 1]];
   }
-  if (kind === 'raid') {
+  if (kind === 'raid' || kind === 'court') {
+    const o = singleDieOdds(target);
+    const pJail = kind === 'raid' ? o.low : o.low + o.mid;
     return [
-      [JAIL_TILE, 1 / 3],
-      [t, 2 / 3],
-    ];
-  }
-  if (kind === 'court') {
-    return [
-      [JAIL_TILE, 2 / 3],
-      [t, 1 / 3],
+      [JAIL_TILE, pJail],
+      [t, 1 - pJail],
     ];
   }
   return [[t, 1]];
@@ -85,7 +97,7 @@ export function visitProbabilities(from, turns = 1, target = 'biasa') {
         const pr = pos[p] * sum[s];
         const t = (p + s) % BOARD_SIZE;
         visits[t] += pr;
-        for (const [dest, w] of settle(t)) next[dest] += pr * w;
+        for (const [dest, w] of settle(t, target)) next[dest] += pr * w;
       }
     }
     pos = next;
@@ -126,10 +138,26 @@ export function passStartProbability(from, target = 'biasa') {
 const hasKeep = (player, id) => Boolean(player?.keepCardIds?.includes(id));
 
 /**
- * Biaya (rupiah, positif = rugi) bila `playerId` mendarat di petak t. Pemasukan negatif.
- * Sewa ke pemilik lain (termasuk Negara). Petak sendiri = 0.
+ * Biaya masuk Lapas bagi `pid`: jaminan + sewa kota sendiri yang masuk Negara selama satu putaran lawan
+ * (sebelum giliran berikut kita sempat membayar jaminan). Tanpa view/kota = jaminan saja.
  */
-export function landingCost(view, playerId, t) {
+export function jailCost(view, pid, target = 'biasa') {
+  if (!view) return 0;
+  const bail = num(view.fees?.bail);
+  let lost = 0;
+  for (const t of view.tilesOf?.(pid) ?? []) {
+    if (view.properties[t]?.mortgaged) continue;
+    lost += expectedRentIncome(view, t, { ownerId: pid, horizon: 1, target });
+  }
+  return bail + lost;
+}
+
+/**
+ * Biaya (rupiah, positif = rugi) bila `playerId` mendarat di petak t. Pemasukan negatif.
+ * Sewa ke pemilik lain (termasuk Negara). Petak sendiri = 0. `target` = zona lempar pemain (dadu tunggal
+ * Razia/Pengadilan: Perfect ambil tertinggi dari dua dadu).
+ */
+export function landingCost(view, playerId, t, target = 'biasa') {
   if (!view) return 0;
   const tile = TILES[t];
   const player = view.player?.(playerId);
@@ -146,16 +174,27 @@ export function landingCost(view, playerId, t) {
       return view.completeProvinces(pid).length > 0 || hasKeep(player, 'juru-parkir') ? 0 : view.fees.parking;
     case 'toll':
       return hasKeep(player, 'voucher-tol') ? 0 : view.fees.toll;
-    case 'raid':
-      return hasKeep(player, 'surat-rt') ? 0 : (2 / 3) * view.fees.raidFine;
+    case 'raid': {
+      if (hasKeep(player, 'surat-rt')) return 0;
+      const o = singleDieOdds(target);
+      return o.low * jailCost(view, pid, target) + (1 - o.low) * view.fees.raidFine;
+    }
     case 'court': {
       const cash = Math.max(0, view.cashOf(pid));
-      return (-view.fees.courtWin + view.fees.courtFine + cash * view.fees.courtSeize) / 3;
+      const win = view.fees.courtWin;
+      const fine = view.fees.courtFine;
+      const seize = cash * view.fees.courtSeize;
+      const jail = jailCost(view, pid, target);
+      // Pengacara: lempar dua kali ambil terbaik.
+      const o = singleDieOdds(target, hasKeep(player, 'pengacara') ? 2 : 1);
+      // Orang Dalam membatalkan putusan buruk; hanya hasil menang yang tersisa.
+      if (hasKeep(player, 'orang-dalam')) return -win * singleDieOdds(target).high;
+      return -win * o.high + (fine + jail) * o.mid + (seize + jail) * o.low;
     }
-    case 'musibah':
-      return hasKeep(player, 'asuransi') || hasKeep(player, 'restu-ibu')
-        ? MUSIBAH_EXPECTED_LOSS / 3
-        : MUSIBAH_EXPECTED_LOSS;
+    case 'musibah': {
+      const loss = MUSIBAH_EXPECTED_LOSS * num(view.feeMultiplier, 1);
+      return hasKeep(player, 'asuransi') || hasKeep(player, 'restu-ibu') ? loss / 3 : loss;
+    }
     case 'start':
       return 0;
     default:
@@ -178,7 +217,7 @@ export function expectedRentExposure(view, playerId, turns = 2, target = 'biasa'
   const byTile = new Array(BOARD_SIZE).fill(0);
   for (let t = 0; t < BOARD_SIZE; t++) {
     if (!visits[t]) continue;
-    const cost = landingCost(view, playerId, t);
+    const cost = landingCost(view, playerId, t, target);
     byTile[t] = visits[t] * cost;
     if (TILES[t].kind === 'city') rent += byTile[t];
     else fees += byTile[t];
@@ -198,6 +237,42 @@ export function recommendedReserve(view, playerId, { turns = 2, riskTolerance = 
   return Math.round(exp.expected + (1 - rt) * exp.worst);
 }
 
+/** Utang `playerId` yang jatuh tempo dalam ≤ 2 giliran (atau tempo tak diketahui). */
+export function dueSoonDebt(view, playerId) {
+  if (!view) return 0;
+  const pid = view.idOf ? view.idOf(playerId ?? view.meId) : (playerId ?? view.meId);
+  return (Array.isArray(view.loans) ? view.loans : [])
+    .filter((l) => l.borrower === pid && (l.turnsLeft === undefined || l.turnsLeft <= 2))
+    .reduce((sum, l) => sum + num(l.owed), 0);
+}
+
+/**
+ * Cadangan kas yang dipakai policy smart (dan Monitor): recommendedReserve, minimal (1,3 − toleransi) × sewa
+ * terburuk, + setengah eskalasi Krisis (kalau game tidak mengirim pengali aktual), + utang jatuh tempo ≤ 2 giliran.
+ * @param {object} opts { riskTolerance, reserveRounds, flags: {reserveOverride, neverNegative}, target, playerId }
+ */
+export function policyReserve(
+  view,
+  { riskTolerance = 0.5, reserveRounds = 1, flags = {}, target = 'biasa', playerId } = {},
+) {
+  if (!view) return 0;
+  const f = flags && typeof flags === 'object' ? flags : {};
+  if (typeof f.reserveOverride === 'number' && Number.isFinite(f.reserveOverride)) return f.reserveOverride;
+  const rt = Math.max(0, Math.min(1, Number.isFinite(riskTolerance) ? riskTolerance : 0.5));
+  const turns = Math.max(1, Math.round(2 * num(reserveRounds, 1)));
+  const pid = playerId ?? view.meId;
+  let base = recommendedReserve(view, pid, { turns, riskTolerance: rt, target });
+  // Satu kali kena sewa terbesar yang mungkin (kota lawan berbangunan) jangan sampai memaksa gadai beruntun.
+  const worst = expectedRentExposure(view, pid, turns, target).worst;
+  base = Math.max(base, worst * (1.3 - rt));
+  if (view.crisis && typeof view.rules?.rentMultiplier !== 'number') {
+    base *= 1 + num(view.difficulty?.crisisRentEscalation) / 2;
+  }
+  base += dueSoonDebt(view, pid);
+  base = Math.round(base);
+  return f.neverNegative ? Math.round(base * 1.5 + 300_000) : base;
+}
+
 /** Bonus petak "hotspot": 5–9 langkah setelah START/Lapas/tol (paling sering didarati). */
 export function hotspotScore(tile) {
   const { sum } = diceSumDistribution('biasa');
@@ -211,9 +286,9 @@ export function hotspotScore(tile) {
 
 /**
  * Ekspektasi pemasukan sewa petak `tile` dari lawan dalam `horizon` giliran.
- * @param {object} opts { ownerId, level, horizon }
+ * @param {object} opts { ownerId, level, horizon, target } (target = zona lempar lawan, default 'biasa')
  */
-export function expectedRentIncome(view, tile, { ownerId, level, horizon = 10 } = {}) {
+export function expectedRentIncome(view, tile, { ownerId, level, horizon = 10, target = 'biasa' } = {}) {
   if (!view || !provinceOf(tile)) return 0;
   const owner = view.idOf(ownerId ?? view.properties[tile]?.owner ?? view.meId);
   const h = Math.max(0, horizon);
@@ -223,7 +298,7 @@ export function expectedRentIncome(view, tile, { ownerId, level, horizon = 10 } 
   let total = 0;
   for (const opp of view.activePlayers) {
     if (opp.id === owner) continue;
-    const visits = visitProbabilities(opp.position, simTurns);
+    const visits = visitProbabilities(opp.position, simTurns, target);
     total += visits[tile];
   }
   return rent * total * (h / simTurns);
@@ -233,8 +308,8 @@ export function expectedRentIncome(view, tile, { ownerId, level, horizon = 10 } 
  * Nilai ekspektasi sebuah properti: pemasukan sewa selama horizon vs harga.
  * @returns {{income:number, cost:number, net:number, roi:number}}
  */
-export function propertyEV(view, tile, { ownerId, price, horizon = 10, level } = {}) {
-  const income = expectedRentIncome(view, tile, { ownerId, horizon, level });
+export function propertyEV(view, tile, { ownerId, price, horizon = 10, level, target } = {}) {
+  const income = expectedRentIncome(view, tile, { ownerId, horizon, level, target });
   const cost = Number.isFinite(price) ? price : view ? view.tileValue(tile) : 0;
   return { income, cost, net: income - cost, roi: cost > 0 ? income / cost : 0 };
 }
@@ -252,4 +327,77 @@ export function parseRupiahText(text) {
   if (!Number.isFinite(n)) return null;
   const mult = !unit ? 1 : unit.startsWith('r') ? 1e3 : unit === 'm' || unit === 'miliar' ? 1e9 : 1e6;
   return Math.round(n * mult);
+}
+
+/** Rata-rata giliran per putaran papan (gaji diterima saat melewati START). */
+const TURNS_PER_LAP = BOARD_SIZE / 7;
+
+/**
+ * Peluang peminjam gagal melunasi `amount` + bunga `pct`% dalam tempo pinjaman (heuristik murni).
+ * Kemampuan bayar = kas setelah menerima pinjaman + gaji yang diharapkan selama tempo + ½ nilai cair aset
+ * (gadai kota tak tergadai + refund bangunan; kota tergadai tidak dihitung) − ekspektasi sewa/biaya selama
+ * tempo − utang lain. Cakupan = kemampuan ÷ total tagihan; pDefault = 1,25 − 0,4 × cakupan (dibatasi 5–95%).
+ * Bunga lebih tinggi → tagihan lebih besar → peluang gagal bayar naik.
+ */
+export function loanDefaultProbability(view, borrowerId, amount, pct, target = 'biasa') {
+  if (!view?.player) return 0.95;
+  const b = view.player(borrowerId);
+  if (!b || b.bankrupt) return 1;
+  const amt = Math.max(0, num(amount));
+  const owed = amt * (1 + Math.max(0, num(pct)) / 100);
+  if (owed <= 0) return 0.05;
+  const cashAfter = num(b.cash) + amt;
+  if (cashAfter < 0) return 0.95; // pinjaman tidak menutup kekurangan: tetap bangkrut
+  const d = view.difficulty ?? {};
+  const turns = Math.max(1, num(d.loanTurns, 3));
+  const income = num(b.salary, num(d.salary)) * (turns / TURNS_PER_LAP);
+  let liquid = 0;
+  for (const t of view.tilesOf?.(b.id) ?? []) {
+    const prop = view.properties[t];
+    const info = PROVINCES[provinceOf(t)];
+    if (!prop || !info || prop.mortgaged) continue;
+    liquid += info.price * num(d.mortgage, 0.5) + prop.level * info.upgradeCost * num(d.buildingRefund, 0.5);
+  }
+  const exposure = expectedRentExposure(view, b.id, turns, target).expected;
+  const capacity = cashAfter + income + liquid * 0.5 - exposure - num(view.debtOf?.(b.id));
+  const coverage = capacity / owed;
+  return Math.max(0.05, Math.min(0.95, 1.25 - 0.4 * coverage));
+}
+
+/**
+ * Penilaian keamanan meminjamkan `amount` ke `borrowerId` (murni). Tidak pernah melempar.
+ * Syarat: jumlah diketahui; peminjam ada, belum bangkrut, tidak punya utang lain; kita tidak berutang;
+ * game tidak hampir selesai; kas − jumlah ≥ cadangan × reserveFactor; jumlah ≤ maxShare × (kas − cadangan);
+ * peminjam tidak lebih kaya. Lolos → daftar opsi bunga dengan pDefault & EV = tagihan × (1 − pDefault) − jumlah.
+ * @returns {{ok:boolean, reason:string, amt?:number, options?:Array<{pct:number,pDefault:number,ev:number}>}}
+ */
+export function assessLoan(
+  view,
+  borrowerId,
+  amount,
+  { reserve = 0, reserveFactor = 1.5, maxShare = 0.25, target = 'biasa', requireNotRicher = true } = {},
+) {
+  const no = (reason) => ({ ok: false, reason });
+  const p = view?.me;
+  if (!p || p.missing) return no('view kosong');
+  const b = view.player?.(borrowerId);
+  if (!b || b.id === p.id) return no('peminjam tidak dikenal');
+  if (b.bankrupt) return no('peminjam sudah bangkrut');
+  if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
+    return no('jumlah pinjaman tidak diketahui');
+  }
+  const amt = amount;
+  if (num(view.debtOf?.(p.id)) > 0 || num(p.cash) < 0) return no('kita sendiri masih berutang');
+  if (num(view.debtOf?.(b.id)) > 0) return no('peminjam masih punya utang lain');
+  const loanTurns = num(view.difficulty?.loanTurns, 3);
+  if (num(view.roundsLeft, Infinity) <= loanTurns + 1) return no('game hampir selesai, pinjaman tak kembali');
+  const r = Math.max(0, num(reserve));
+  if (p.cash - amt < r * reserveFactor) return no('kas kita tipis untuk meminjamkan');
+  if (amt > maxShare * (p.cash - r)) return no('pinjaman terlalu besar dibanding kas lebih');
+  if (requireNotRicher && view.netWorth(b.id) > view.netWorth(p.id)) return no('jangan bantu pemain yang lebih kaya');
+  const options = LOAN_INTEREST_OPTIONS.map((pct) => {
+    const pDefault = loanDefaultProbability(view, b.id, amt, pct, target);
+    return { pct, pDefault, ev: amt * (1 + pct / 100) * (1 - pDefault) - amt };
+  });
+  return { ok: true, reason: 'aman', amt, options };
 }

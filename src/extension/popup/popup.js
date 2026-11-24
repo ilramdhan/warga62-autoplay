@@ -1,23 +1,40 @@
 import {
+  KEYS,
+  START_GRACE_MS,
+  GAME_URL,
   loadConfig,
   saveConfig,
   errorsOf,
+  fillOwnDefaults,
+  addKnownAccounts,
+  removeKnownAccounts,
   loadStatus,
   loadLogs,
   onStorageChange,
+  openTab,
+  extensionUrl,
   formatRupiah,
   logLine,
   statusFields,
+  stateLabel,
+  handlerLabel,
+  phaseLabel,
+  isStale,
 } from '../shared.js';
 
 const $ = (id) => document.getElementById(id);
 let config = null;
+let status = statusFields(null);
 let foreignNames = [];
+/** Nama yang terakhir ditambahkan lewat "Semua pemain ini akun saya" (untuk tombol Batalkan). */
+let adopted = [];
+/** Waktu tombol MULAI ditekan; dipakai untuk mendeteksi tab game yang tidak mengirim status. */
+let startedAt = 0;
 
 function showError(msgs) {
-  const el = $('err');
-  el.hidden = !msgs.length;
-  el.textContent = msgs.join(' ');
+  $('err-box').hidden = !msgs.length;
+  $('err').textContent = msgs.join(' ');
+  $('toggle').classList.toggle('error', msgs.length > 0);
 }
 
 function renderConfig() {
@@ -25,33 +42,49 @@ function renderConfig() {
   const t = $('toggle');
   t.classList.toggle('on', on);
   t.classList.toggle('off', !on);
-  t.setAttribute('aria-pressed', String(on));
-  t.querySelector('.toggle-label').textContent = on ? 'BERHENTI' : 'MULAI';
-  t.querySelector('.toggle-hint').textContent = on ? 'Bot sedang jalan' : 'Bot sedang mati';
+  $('toggle-label').textContent = on ? 'BERHENTI' : 'MULAI';
+  $('toggle-hint').textContent = on ? 'Bot sedang jalan' : 'Bot sedang mati';
   if (document.activeElement !== $('myName')) $('myName').value = config.myName || '';
-  for (const seg of document.querySelectorAll('.seg')) {
-    for (const b of seg.querySelectorAll('button')) {
-      b.setAttribute('aria-pressed', String(config[seg.dataset.key] === b.dataset.value));
-    }
+  for (const input of document.querySelectorAll('.seg input[type="radio"]')) {
+    input.checked = config[input.name] === input.value;
   }
 }
 
-function renderStatus(s) {
-  const f = statusFields(s);
+function renderStatus() {
+  const f = status;
   const txt = (v) => (v === null || v === undefined || v === '' ? '-' : String(v));
-  $('s-state').textContent = txt(f.state);
-  $('s-handler').textContent = txt(f.handler);
+  $('s-state').textContent = stateLabel(f.state, f.reason);
+  $('s-handler').textContent = handlerLabel(f.handler);
   $('s-round').textContent = txt(f.round);
-  $('s-phase').textContent = txt(f.phase);
+  $('s-phase').textContent = phaseLabel(f.phase);
   $('s-cash').textContent = formatRupiah(f.cash);
   renderPlayers(f);
   renderMonitor(f.insight);
+  renderAge();
+}
+
+/** Usia status + deteksi tab game yang tidak terhubung. Dipanggil tiap detik (tanpa baca storage). */
+function renderAge() {
+  const f = status;
+  const now = Date.now();
   if (f.at) {
-    const sec = Math.max(0, Math.round((Date.now() - f.at) / 1000));
+    const sec = Math.max(0, Math.round((now - f.at) / 1000));
     $('s-age').textContent = `Update terakhir ${sec} detik lalu.`;
   } else {
-    $('s-age').textContent = 'Belum ada data dari halaman game. Buka mainwarga62.id.';
+    $('s-age').textContent = 'Belum ada data dari halaman game.';
   }
+  if (startedAt && f.at && f.at >= startedAt) startedAt = 0;
+  const stale = isStale(f.at, now);
+  const noAnswer = Boolean(startedAt) && now - startedAt > START_GRACE_MS;
+  const disconnected = stale || noAnswer;
+  $('status-panel').classList.toggle('stale', disconnected);
+  const box = $('conn-box');
+  if (box.hidden === disconnected) box.hidden = !disconnected;
+  const msg = noAnswer
+    ? 'Bot belum mendapat jawaban dari tab game. Buka mainwarga62.id lalu muat ulang tab-nya.'
+    : 'Tab game tidak terhubung. Buka mainwarga62.id';
+  // Hindari pengumuman ulang oleh pembaca layar: tulis hanya bila teksnya berubah.
+  if ($('conn-msg').textContent !== msg) $('conn-msg').textContent = msg;
 }
 
 function renderMonitor(ins) {
@@ -63,7 +96,7 @@ function renderMonitor(ins) {
   $('mon-opps').replaceChildren(
     ...top.map((o) => {
       const li = document.createElement('li');
-      li.textContent = `${o.name} — ${formatRupiah(o.cash)} · ${formatRupiah(o.threat)}`;
+      li.textContent = `${o.name} — kas ${formatRupiah(o.cash)} · ancaman ${formatRupiah(o.threat)}`;
       return li;
     }),
   );
@@ -87,29 +120,46 @@ async function adoptForeign() {
   const names = foreignNames;
   if (!names.length) return;
   if (!window.confirm(`Pastikan SEMUA pemain berikut akun milikmu sendiri: ${names.join(', ')}. Lanjutkan?`)) return;
-  const accounts = [...(config.accounts || [])];
-  for (const n of names) {
-    if (!accounts.some((a) => a.toLowerCase() === n.toLowerCase())) accounts.push(n);
-  }
+  // Hanya ke daftar akun milikmu (pengaman), TIDAK ke Akun yang ikut main: undangan & kursi room tidak berubah.
+  const { accounts, added, error } = addKnownAccounts(config, names);
   const err = $('adopt-err');
-  if (accounts.length > 8) {
-    err.textContent = 'Akun melebihi batas 8 nick. Kurangi daftar akun di Pengaturan lengkap.';
-    err.hidden = false;
-    return;
-  }
-  err.hidden = true;
+  err.hidden = !error;
+  err.textContent = error || '';
+  if (error) return;
+  adopted = added;
   await update({ accounts });
+  renderAdopted();
 }
 
-async function renderLogs() {
-  const logs = (await loadLogs()).slice(-20);
+function renderAdopted() {
+  const box = $('adopt-done');
+  box.hidden = !adopted.length;
+  if (adopted.length) {
+    $('adopt-done-msg').textContent =
+      `Ditambahkan ke daftar akun milikmu: ${adopted.join(', ')}. ` +
+      'Tidak ikut diundang; atur Akun yang ikut main di Pengaturan lengkap.';
+  }
+}
+
+async function undoAdopt() {
+  if (!adopted.length) return;
+  const accounts = removeKnownAccounts(config, adopted);
+  adopted = [];
+  await update({ accounts });
+  renderAdopted();
+}
+
+function renderLogs(list) {
+  const logs = (Array.isArray(list) ? list : []).slice(-20);
   const el = $('logs');
+  // Gulir otomatis hanya bila pengguna memang sedang di dekat bagian bawah.
+  const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
   el.textContent = logs.length ? logs.map(logLine).join('\n') : 'Belum ada log.';
-  el.scrollTop = el.scrollHeight;
+  if (nearBottom) el.scrollTop = el.scrollHeight;
 }
 
 async function update(patch) {
-  const next = { ...config, ...patch };
+  const next = fillOwnDefaults({ ...config, ...patch });
   const errs = errorsOf(next);
   // Hanya cegah MENGAKTIFKAN bot saat ada galat. Perubahan field lain (role, nick, mode)
   // tetap disimpan, supaya setelan tidak pernah "tersangkut" karena galat yang tak berkaitan.
@@ -118,47 +168,60 @@ async function update(patch) {
     return;
   }
   showError(next.enabled ? errs : []);
+  if (patch.enabled === true) startedAt = Date.now();
+  if (patch.enabled === false) startedAt = 0;
   config = await saveConfig(next);
   renderConfig();
+  renderAge();
 }
 
-async function refresh() {
-  renderStatus(await loadStatus());
-  await renderLogs();
+function openOptions(hash) {
+  openTab(extensionUrl(`options/options.html#${hash}`));
+  window.close();
 }
 
 async function init() {
   config = await loadConfig();
   renderConfig();
-  await refresh();
+  status = statusFields(await loadStatus());
+  renderStatus();
+  renderLogs(await loadLogs());
 
   $('toggle').addEventListener('click', () => update({ enabled: !config.enabled }));
   $('adopt').addEventListener('click', adoptForeign);
+  $('adopt-undo').addEventListener('click', undoAdopt);
+  $('fix-config').addEventListener('click', () => openOptions('akun'));
+  $('open-game').addEventListener('click', () => {
+    openTab(GAME_URL);
+    window.close();
+  });
   $('myName').addEventListener('change', (e) => update({ myName: e.target.value.trim() }));
-  for (const seg of document.querySelectorAll('.seg')) {
-    seg.addEventListener('click', (e) => {
-      const b = e.target.closest('button');
-      if (b) update({ [seg.dataset.key]: b.dataset.value });
+  for (const input of document.querySelectorAll('.seg input[type="radio"]')) {
+    input.addEventListener('change', () => {
+      if (input.checked) update({ [input.name]: input.value });
     });
   }
   $('open-options').addEventListener('click', (e) => {
     e.preventDefault();
-    chrome.runtime.openOptionsPage();
-    window.close();
+    openOptions('akun');
   });
   $('open-monitor').addEventListener('click', (e) => {
     e.preventDefault();
-    chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html#monitor') });
-    window.close();
+    openOptions('monitor');
   });
   onStorageChange(async (changes) => {
-    if (changes['w62.config']) {
+    if (changes[KEYS.config]) {
       config = await loadConfig();
       renderConfig();
     }
-    if (changes['w62.status'] || changes['w62.logs']) refresh();
+    if (changes[KEYS.status]) {
+      status = statusFields(changes[KEYS.status].newValue ?? null);
+      renderStatus();
+    }
+    if (changes[KEYS.logs]) renderLogs(changes[KEYS.logs].newValue);
   });
-  setInterval(refresh, 3000);
+  // Hanya untuk teks "N detik lalu" dan deteksi status basi; data baru datang lewat onStorageChange.
+  setInterval(renderAge, 1000);
 }
 
 init();

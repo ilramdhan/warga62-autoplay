@@ -8,6 +8,9 @@ import {
   percentFromText,
   nameFromTitle,
   roomOptionLabels,
+  selectInvitees,
+  otherAccounts,
+  roomMaxPlayers,
 } from '../src/core/handlers/util.js';
 import { matchLabel, norm } from '../src/core/dom/query.js';
 import { createLogger } from '../src/core/log.js';
@@ -103,4 +106,27 @@ test('createLogger: emit event log, debug hanya bila aktif', () => {
     ],
   );
   assert.equal(typeof out[0].ts, 'number');
+});
+
+test('selectInvitees: hanya roster yang belum hadir, tamu tidak pernah melebihi maks. pemain - 1', () => {
+  // Room 4 kursi, saya sendirian: maks 3 tamu.
+  assert.deepEqual(selectInvitees({ missing: ['a', 'b', 'c', 'd'], count: 1, maxPlayers: 4 }), {
+    invite: ['a', 'b', 'c'],
+    skipped: ['d'],
+  });
+  // 1 tamu sudah hadir, 1 sudah "Terundang": sisa 1 kursi.
+  assert.deepEqual(selectInvitees({ missing: ['b', 'c', 'd'], pending: ['B'], count: 2, maxPlayers: 4 }), {
+    invite: ['c'],
+    skipped: ['d'],
+  });
+  assert.deepEqual(selectInvitees({ missing: ['x'], count: 4, maxPlayers: 4 }).invite, []);
+  assert.deepEqual(selectInvitees({ missing: [], count: 1, maxPlayers: 8 }).invite, []);
+});
+
+test('otherAccounts memakai roster (bukan semua akun dikenal); roomMaxPlayers memakai roomPreset', () => {
+  const cfg = { myName: 'H', accounts: ['H', 'a', 'basi1', 'basi2'], roster: ['H', 'a'] };
+  assert.deepEqual(otherAccounts(cfg), ['a']);
+  assert.deepEqual(otherAccounts({ myName: 'H', accounts: ['H', 'z'] }), ['z'], 'config lama tanpa roster');
+  assert.equal(roomMaxPlayers({ room: { maxPlayers: 4 }, roomPreset: { maxPlayers: 6 } }), 6);
+  assert.equal(roomMaxPlayers({ room: { maxPlayers: 4 } }), 4);
 });

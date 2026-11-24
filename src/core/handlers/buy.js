@@ -1,5 +1,13 @@
-import { parseRupiah } from '../dom/money.js';
-import { ask, myPosition, throttle, tileIndexFromText } from './util.js';
+import { formatRupiah, parseRupiah } from '../dom/money.js';
+import { ask, myPosition, throttle, tileIndexFromText, tileName } from './util.js';
+
+/** Pesan log singkat: "beli Makassar (Rp1,1 jt)", "Flash Sale Makassar (…)", "tidak beli Makassar". */
+export function buyLog(kind, name, price) {
+  const where = name ? ` ${name}` : '';
+  const cost = Number.isFinite(price) ? ` (${formatRupiah(price)})` : '';
+  if (kind === 'skip') return `tidak beli${where}${cost}`;
+  return `${kind === 'flash' ? 'beli (Flash Sale)' : 'beli'}${where}${cost}`;
+}
 
 /** Beli tanah (awaiting_buy): policy.shouldBuy; "Flash Sale" bila policy.useKeepCard setuju. */
 export default {
@@ -27,7 +35,7 @@ export default {
     }
     await ctx.act.pause(ctx.cfg.timing.actionDelayMs);
     ctx.act.click(choice ?? no);
-    ctx.log.info(choice ? `Beli: ${labelOf(choice)}.` : 'Tidak beli.');
+    ctx.log.info(buyLog(choice ? (choice === flash ? 'flash' : 'buy') : 'skip', tileName(tile), price));
     await ctx.act.sleep(1000);
     return true;
   },

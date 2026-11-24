@@ -12,20 +12,34 @@
       <span class="sub">Autoplay</span>
     </header>
 
-    <button id="toggle" class="toggle off" type="button" aria-pressed="false">
-      <span class="toggle-label">MULAI</span>
-      <span class="toggle-hint">Bot sedang mati</span>
+    <button
+      id="toggle"
+      class="toggle off"
+      type="button"
+      aria-labelledby="toggle-label"
+      aria-describedby="toggle-hint err"
+    >
+      <span id="toggle-label" class="toggle-label">MULAI</span>
+      <span id="toggle-hint" class="toggle-hint">Bot sedang mati</span>
     </button>
-    <p id="err" class="err" role="alert" hidden></p>
+    <div id="err-box" class="err" hidden>
+      <p id="err" role="alert"></p>
+      <button id="fix-config" class="adopt" type="button">Lengkapi di Pengaturan</button>
+    </div>
 
-    <section class="panel" aria-label="Status">
+    <div id="conn-box" class="warn" role="status" hidden>
+      <p id="conn-msg">Tab game tidak terhubung. Buka mainwarga62.id</p>
+      <button id="open-game" class="adopt" type="button">Buka mainwarga62.id</button>
+    </div>
+
+    <section id="status-panel" class="panel" aria-label="Status">
       <dl class="status">
-        <div>
+        <div class="wide">
           <dt>Status</dt>
           <dd id="s-state">-</dd>
         </div>
         <div>
-          <dt>Handler</dt>
+          <dt>Aksi</dt>
           <dd id="s-handler">-</dd>
         </div>
         <div>
@@ -36,7 +50,7 @@
           <dt>Fase</dt>
           <dd id="s-phase">-</dd>
         </div>
-        <div class="wide">
+        <div>
           <dt>Kas</dt>
           <dd id="s-cash">-</dd>
         </div>
@@ -51,6 +65,10 @@
         <button id="adopt" class="adopt" type="button">Semua pemain ini akun saya</button>
       </div>
       <p id="adopt-err" class="err" role="alert" hidden></p>
+      <div id="adopt-done" class="note" role="status" hidden>
+        <p id="adopt-done-msg"></p>
+        <button id="adopt-undo" class="link-btn" type="button">Batalkan</button>
+      </div>
     </section>
 
     <section id="monitor-panel" class="panel" aria-label="Monitor" hidden>
@@ -61,28 +79,24 @@
 
     <section class="panel quick" aria-label="Pengaturan cepat">
       <label class="field">
-        <span>Nick saya</span>
+        <span>Nick kamu</span>
         <input id="myName" type="text" autocomplete="off" spellcheck="false" placeholder="nick di mainwarga62.id" />
       </label>
-      <div class="field">
-        <span>Peran browser ini</span>
-        <div class="seg" role="group" aria-label="Peran" data-key="role">
-          <button type="button" data-value="host">Host</button>
-          <button type="button" data-value="guest">Guest</button>
-        </div>
-      </div>
-      <div class="field">
-        <span>Mode</span>
-        <div class="seg" role="group" aria-label="Mode" data-key="mode">
-          <button type="button" data-value="grind">Grinding XP</button>
-          <button type="button" data-value="arena">Arena pintar</button>
-        </div>
-      </div>
+      <fieldset class="field seg">
+        <legend>Peran browser ini</legend>
+        <label><input type="radio" name="role" value="host" /><span>Host</span></label>
+        <label><input type="radio" name="role" value="guest" /><span>Guest</span></label>
+      </fieldset>
+      <fieldset class="field seg">
+        <legend>Mode</legend>
+        <label><input type="radio" name="mode" value="grind" /><span>Grinding XP</span></label>
+        <label><input type="radio" name="mode" value="arena" /><span>Arena pintar</span></label>
+      </fieldset>
     </section>
 
     <section class="panel" aria-label="Log terakhir">
       <h2>Log terakhir</h2>
-      <pre id="logs" class="logs" tabindex="0">Belum ada log.</pre>
+      <pre id="logs" class="logs" tabindex="0" aria-label="Log terakhir">Belum ada log.</pre>
     </section>
 
     <footer>
